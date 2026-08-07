@@ -83,7 +83,11 @@ def decide(candidates: List[Candidate]) -> VerificationResult:
         )
 
     best = max(usable, key=lambda c: c.confidence)
-    state = state_for_confidence(best.confidence, len(usable))
+    # Decide the state from the TOTAL number of candidate matches, not just
+    # those with an audio enclosure.  Two near-identical titles -- one with an
+    # enclosure, one silently lacking one -- is still ambiguous and must not be
+    # auto-verified (false match worse than failure).
+    state = state_for_confidence(best.confidence, len(candidates))
 
     reasons = {
         VERIFIED: "Single high-confidence match (title and duration agree).",

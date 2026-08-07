@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from . import config as config_mod
-from .store import JOB_COMPLETE, JOB_FAILED, JOB_PENDING, JOB_RUNNING, Store
+from .store import JOB_COMPLETE, JOB_FAILED, JOB_PENDING, Store
 
 log = logging.getLogger(__name__)
 
@@ -71,13 +71,21 @@ def transcribe_job(
 ) -> Dict[str, Any]:
     """Run (or resume) transcription for a job. Returns a summary dict."""
     cfg = config_mod.get_config()
-    chunk_minutes = chunk_minutes if chunk_minutes is not None else cfg.chunk_minutes
-    transcribe_func = transcribe_func or _default_transcribe
-    progress = progress or (lambda s: print(s, file=sys.stdout))
 
     job = store.get_job(job_id)
     if job is None:
         raise TranscribeError(f"Job {job_id} does not exist")
+    # Prefer the caller's value, then the job's original grid (resume), then cfg.
+    if chunk_minutes is not None:
+        pass
+    elif job.chunk_minutes is not None:
+        chunk_minutes = job.chunk_minutes
+    else:
+        chunk_minutes = cfg.chunk_minutes
+
+    transcribe_func = transcribe_func or _default_transcribe
+    progress = progress or (lambda s: print(s, file=sys.stdout))
+
     model = model or job.model or cfg.model
     episode = store.get_episode(job.episode_id)  # type: ignore[arg-type]
     if episode is None or not episode.audio_url:
@@ -89,7 +97,8 @@ def transcribe_job(
     if not Path(audio_path).is_file():
         raise TranscribeError(f"Audio file not found: {audio_path}")
 
-    # --- single-active-job guard ------------------------------------------ #
+    # --- single-active-job guards ---------------------------------------- #
+    # Distinct-job guard: no *other* job may be active (pending/running).
     active = store.active_jobs()
     for other in active:
         if other.id != job_id:
@@ -97,8 +106,15 @@ def transcribe_job(
                 f"Job {other.id} is already {other.status}; "
                 "only one active job is allowed at a time"
             )
-
-    store.update_job(job_id, status=JOB_RUNNING, error=None)
+    # Same-job guard: atomically claim THIS job (PENDING -> RUNNING).  Two
+    # processes racing on the same job: only one conditional UPDATE matches, the
+    # loser gets rowcount 0 and reports already-running instead of duplicating
+    # work.
+    if not store.claim_job(job_id):
+        raise TranscribeError(
+            f"Job {job_id} is not PENDING; it is already being processed "
+            "by another run (resume requires a PENDING job)"
+        )
 
     summary: Dict[str, Any] = {
         "job_id": job_id,
@@ -137,6 +153,10 @@ def transcribe_job(
             end = min(total_samples, start + chunk_samples)
             progress(f"chunk {idx + 1}/{n_chunks}: transcribing samples "
                      f"[{start // sr:.0f}s..{end // sr:.0f}s] with {model}")
+            # Resume idempotency: a chunk that never got its 'done' checkpoint
+            # may have left stale segment rows from an earlier partial run.
+            # Clear them first so re-transcription cannot duplicate.
+            store.delete_segments_for_chunk(job_id, idx)
             try:
                 result = transcribe_func(samples[start:end], model)
             except Exception as exc:

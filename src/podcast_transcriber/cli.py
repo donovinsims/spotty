@@ -3,6 +3,7 @@
 Subcommands:
   resolve  SPOTIFY_URL   Resolve a Spotify episode to an audio URL (network).
   add-file PATH          Register a local audio file as an episode + PENDING job.
+  download EPISODE_ID    Fetch an episode's audio enclosure locally + PENDING job.
   jobs                   List jobs.
   transcribe JOB_ID      Transcribe (or resume) a job with MLX Whisper.
   status [JOB_ID]        Show job status and verification info.
@@ -20,6 +21,7 @@ from typing import List, Optional
 
 from . import __version__
 from .config import get_config
+from .download import DownloadError, download_episode
 from .resolve import resolve as do_resolve
 from .store import (
     JOB_COMPLETE,
@@ -69,6 +71,9 @@ def build_parser() -> argparse.ArgumentParser:
     af.add_argument("path")
     af.add_argument("--title", default=None)
     af.add_argument("--model", default=None)
+
+    d = sub.add_parser("download", help="download an episode's audio enclosure locally + create a job")
+    d.add_argument("episode_id", type=int)
 
     sub.add_parser("jobs", help="list transcription jobs")
 
@@ -126,7 +131,7 @@ def cmd_resolve(args, store: Store, cfg) -> int:
         d["episode_id"] = episode_id
 
     if args.json:
-        _pretty(res.as_dict())
+        _pretty(d)
     else:
         st = res.result.state if res.result else "?"
         col = _STATE_COLORS.get(st, st)
@@ -175,6 +180,21 @@ def cmd_add_file(args, store: Store, cfg) -> int:
     return 0
 
 
+def cmd_download(args, store: Store, cfg) -> int:
+    try:
+        out = download_episode(
+            store, args.episode_id, cfg.audio_dir,
+            progress=lambda s: print(s, file=sys.stderr),
+        )
+    except (DownloadError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"audio for episode {out['episode_id']}: {out['audio_path']}")
+    print(f"job {out['job'].id} ({out['job'].status})")
+    print(f"next: pt transcribe {out['job'].id}")
+    return 0
+
+
 def cmd_jobs(store: Store, cfg) -> int:
     jobs = store.list_jobs(limit=50)
     if not jobs:
@@ -192,6 +212,7 @@ def cmd_transcribe(args, store: Store, cfg) -> int:
         summary = transcribe_job(
             store, args.job_id, model=args.model,
             chunk_minutes=args.chunk_minutes,
+            progress=(lambda s: print(s, file=sys.stderr)) if args.json else None,
         )
     except (TranscribeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -268,8 +289,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_resolve(args, store, cfg)
         if args.command == "add-file":
             return cmd_add_file(args, store, cfg)
+        if args.command == "download":
+            return cmd_download(args, store, cfg)
         if args.command == "jobs":
-            return cmd_jobs(args, store, cfg)
+            return cmd_jobs(store, cfg)
         if args.command == "transcribe":
             return cmd_transcribe(args, store, cfg)
         if args.command == "status":

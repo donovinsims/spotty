@@ -47,6 +47,20 @@ def test_multiple_matches_review_required_even_if_top_is_strong():
     assert res.state == REVIEW_REQUIRED
 
 
+def test_ambiguous_candidate_without_audio_not_verified():
+    """Two near-identical titles, one lacking an enclosure: the TOTAL candidate
+    count decides the state (M6).  One usable candidate must NOT auto-verify."""
+    with_audio = Candidate(audio_url="https://cdn/a.mp3", title="Ep #1 - The Show",
+                           confidence=0.99)
+    no_audio = Candidate(audio_url=None, title="Ep #1 - The Show (Reprise)",
+                         confidence=0.9)
+    res = decide([with_audio, no_audio])
+    assert res.state == REVIEW_REQUIRED
+    # The best *usable* candidate still drives audio_url / confidence.
+    assert res.audio_url == "https://cdn/a.mp3"
+    assert res.confidence == 0.99
+
+
 def test_state_for_confidence_thresholds():
     assert state_for_confidence(0.9, 1) == VERIFIED
     assert state_for_confidence(0.84, 1) == REVIEW_REQUIRED

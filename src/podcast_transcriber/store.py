@@ -333,6 +333,16 @@ class Store:
 
         self._write(_do)
 
+    def set_episode_audio_url(self, episode_id: int, audio_url: str) -> None:
+        """Point an episode at a (new) audio source, e.g. after a download."""
+
+        def _do(conn: sqlite3.Connection) -> None:
+            conn.execute(
+                "UPDATE episodes SET audio_url=? WHERE id=?", (audio_url, episode_id)
+            )
+
+        self._write(_do)
+
     # ------------------------------------------------------------------ #
     # jobs
     # ------------------------------------------------------------------ #
@@ -402,6 +412,26 @@ class Store:
         ).fetchall()
         return [Job.from_row(r) for r in rows]
 
+    def claim_job(self, job_id: int) -> bool:
+        """Atomically transition a PENDING job to RUNNING.
+
+        Returns True if this call won the claim (row was PENDING), False if the
+        job is already RUNNING/claimed, terminal, or missing.  The transition is
+        a single conditional UPDATE inside one transaction, so two concurrent
+        processes claiming the same job cannot both win (the loser matches zero
+        rows).  Raises sqlite3.IntegrityError if another *different* job is
+        already active (partial unique index on jobs.status).
+        """
+
+        def _do(conn: sqlite3.Connection) -> bool:
+            cur = conn.execute(
+                "UPDATE jobs SET status=?, updated_at=? WHERE id=? AND status=?",
+                (JOB_RUNNING, _now(), job_id, JOB_PENDING),
+            )
+            return cur.rowcount == 1
+
+        return self._write(_do)
+
     # ------------------------------------------------------------------ #
     # transcripts & segments
     # ------------------------------------------------------------------ #
@@ -444,6 +474,35 @@ class Store:
             conn.execute("UPDATE transcripts SET segments=segments+1 WHERE id=?", (tx_id,))
 
         self._write(_do)
+
+    def delete_segments_for_chunk(self, job_id: int, chunk_index: int) -> int:
+        """Remove all segments recorded for a chunk (resume idempotency).
+
+        Re-transcribing a chunk whose 'done' checkpoint was never written must
+        not accumulate duplicates.  Deletes the stale rows and decrements the
+        owning transcript's segment count accordingly.  Returns the number of
+        rows removed.
+        """
+
+        def _do(conn: sqlite3.Connection) -> int:
+            tx = conn.execute(
+                "SELECT id FROM transcripts WHERE job_id=?", (job_id,)
+            ).fetchone()
+            if tx is None:
+                return 0
+            cur = conn.execute(
+                "DELETE FROM segments WHERE job_id=? AND chunk_index=?",
+                (job_id, chunk_index),
+            )
+            removed = cur.rowcount
+            if removed:
+                conn.execute(
+                    "UPDATE transcripts SET segments=MAX(0, segments-?) WHERE id=?",
+                    (removed, tx["id"]),
+                )
+            return removed
+
+        return self._write(_do)
 
     # ------------------------------------------------------------------ #
     # checkpoints

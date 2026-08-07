@@ -32,7 +32,13 @@ DEFAULT_CHUNK_MINUTES = 10.0
 
 
 def load_env() -> None:
-    """Load `.env` (if present) into the environment. Idempotent-ish."""
+    """Load `.env` (if present) into the environment. Idempotent-ish.
+
+    We prefer a `.env` at the repository/package root (so `pt` works from any
+    CWD), then fall back to the current working directory.
+    """
+    root_env = Path(__file__).resolve().parents[2] / ".env"
+    load_dotenv(root_env, override=False)
     load_dotenv(os.path.join(os.getcwd(), ".env"), override=False)
 
 

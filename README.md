@@ -29,6 +29,9 @@ This installs the `pt` console script and the `podcast_transcriber` package.
 
 Create a `.env` in the repo root (it is git-ignored) or export env vars.
 
+> `.env` is resolved from the **repo root** first, then the current working
+> directory, so `pt` works from any CWD — no need to `cd` into the repo.
+
 | Variable                | Default                        | Description                                   |
 |-------------------------|--------------------------------|-----------------------------------------------|
 | `PT_MODEL`              | `mlx-community/whisper-small-mlx` | MLX Whisper model for transcription           |
@@ -46,6 +49,7 @@ The MLX model downloads on first use into HuggingFace's cache
 pt resolve  "https://open.spotify.com/episode/<id>"     # resolve URL -> audio
 pt resolve  "https://open.spotify.com/episode/<id>" --store
 pt add-file /path/to/audio.wav [--title "My clip"]       # register local audio
+pt download <episode_id>                                 # fetch remote audio + create a job
 pt jobs                                                   # list jobs
 pt transcribe <job_id> [--model ...] [--chunk-minutes ...]
 pt status  [job_id]
@@ -63,9 +67,20 @@ pt search "Lex Fridman"
 > deliberately conservative: when in doubt it returns `REVIEW_REQUIRED` /
 > `UNAVAILABLE` instead of guessing.
 
-To transcribe a real episode's audio you first need the audio file (downloading
-audio is not part of this phase). For local files: `pt add-file <path>` registers
-the file as an episode and creates a job, then `pt transcribe <job_id>`.
+To transcribe a real episode's audio, the natural three-step flow is:
+
+```bash
+pt resolve  "https://open.spotify.com/episode/<id>" --store   # 1. verify + find enclosure
+pt download <episode_id>                                       # 2. fetch audio locally (creates a job)
+pt transcribe <job_id>                                         # 3. chunked transcription (resumable)
+```
+
+`pt download <episode_id>` streams the enclosure URL into `data/audio/`
+(verifying it decodes via `ffprobe`, and rejecting non-http(s) schemes), updates
+the episode's `audio_url` to the local path, and creates a `PENDING` job if the
+episode has none yet. If the audio URL is already a local path, the download is
+skipped. For local files you can instead use `pt add-file <path>`, which
+registers the file and creates a job in one step.
 
 ## Data layout
 
@@ -77,7 +92,7 @@ data/
 │    ├── transcripts              # one row per completed job
 │    ├── segments                 # per-chunk timed segments
 │    └── checkpoints              # per-chunk resume markers
-├── audio/                        # (future) downloaded audio
+├── audio/                        # downloaded episode audio (pt download)
 └── cache/
 ```
 
@@ -97,7 +112,6 @@ completed chunk is skipped (resume works).
 
 ## Roadmap (future phases)
 
-- Audio download + streaming decode from enclosure URLs.
 - Owner console / web UI.
 - Customer auth, Stripe billing, commission ledger, Twilio + AI receptionist.
 
