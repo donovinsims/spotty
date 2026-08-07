@@ -13,6 +13,7 @@ Design:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 import os
@@ -158,7 +159,13 @@ def transcribe_job(
             # Clear them first so re-transcription cannot duplicate.
             store.delete_segments_for_chunk(job_id, idx)
             try:
-                result = transcribe_func(samples[start:end], model)
+                # Some model backends (e.g. mlx_whisper) print diagnostics such
+                # as "Detected language: ..." and progress bars straight to
+                # stdout. When the CLI runs with --json, that noise would
+                # corrupt the pure-JSON summary. Redirect the model call's
+                # stdout to stderr so the CLI stdout stays clean.
+                with contextlib.redirect_stdout(sys.stderr):
+                    result = transcribe_func(samples[start:end], model)
             except Exception as exc:
                 store.set_checkpoint(job_id, idx, "failed", audio_path=audio_path)
                 raise TranscribeError(f"Chunk {idx} transcription failed: {exc}") from exc

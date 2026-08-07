@@ -7,6 +7,7 @@ M5: resume must honour job.chunk_minutes when no value is passed by the caller.
 
 from __future__ import annotations
 
+import json
 import threading
 import wave
 from pathlib import Path
@@ -112,3 +113,28 @@ def test_resume_uses_stored_chunk_minutes(tmp_path, store):
     summary = transcribe_job(store, job.id, transcribe_func=lambda a, m: fake_result())
     # The caller passed no chunk_minutes; the job's stored grid must win.
     assert summary["chunk_minutes"] == 0.5
+
+
+def test_model_stdout_noise_does_not_leak_into_json_stdout(tmp_path, store, capsys):
+    """mlx-whisper prints 'Detected language: ...' directly to stdout. When the
+    CLI runs with --json the summary on stdout must remain pure JSON, so
+    transcribe_job must redirect model stdout noise away from the CLI's stdout.
+    Regression: this test fails before the redirect guard is in place."""
+    wav = make_silence_wav(tmp_path / "n.wav", seconds=6.0)
+    eid, job = _job(store, wav, chunk_minutes=0.5)  # 6s -> 1 chunk
+
+    # Simulate a model backend that writes noise straight to stdout.
+    def noisy_fake(audio, model):
+        print("Detected language: English")
+        return fake_result()
+
+    summary = transcribe_job(
+        store, job.id, transcribe_func=noisy_fake, progress=lambda m: None
+    )
+    # Mimic the CLI's --json summary emission on stdout.
+    print(json.dumps(summary, default=str))
+
+    out = capsys.readouterr().out
+    assert "Detected language" not in out
+    parsed = json.loads(out)  # stdout is empty modulo pure JSON -> parses cleanly
+    assert parsed["job_id"] == job.id
