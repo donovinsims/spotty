@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "podcast-transcriber"
+version = "0.1.0"
+description = "Spotify episode resolver + job queue + chunked MLX Whisper transcription (Phase 1, CLI only)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "mlx>=0.31",
+    "mlx-whisper==0.4.3",
+    "httpx==0.28.1",
+    "feedparser==6.0.12",
+    "pydantic==2.13.3",
+    "python-dotenv==1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.5",
+]
+
+[project.scripts]
+pt = "podcast_transcriber.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires network to download the MLX Whisper model (test_transcribe_resume.py)",
+]
