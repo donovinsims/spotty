@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Sign in</h2>
+  <p class="muted">This instance is protected. Enter the access token from
+    <code>PT_AUTH_TOKEN</code> (repo <code>.env</code>).</p>
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  <form class="column" method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') | urlencode }}{% endif %}">
+    <input type="password" name="token" placeholder="access token"
+           autocomplete="current-password" autofocus required>
+    <button type="submit" class="btn">Sign in</button>
+  </form>
+</section>
+{% endblock %}

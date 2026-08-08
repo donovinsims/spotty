@@ -31,7 +31,14 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="footer">
-    <span class="muted">local · private · runs entirely on this machine</span>
+    <span class="muted">local · private · runs entirely on this machine
+      {% if auth_enabled %}<span class="muted">· token auth on</span>{% endif %}
+    </span>
+    {% if auth_enabled %}
+    <form class="logout-form" method="post" action="/logout">
+      <button type="submit" class="btn btn-ghost btn-small">Sign out</button>
+    </form>
+    {% endif %}
   </footer>
 </body>
 </html>

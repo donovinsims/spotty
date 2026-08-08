@@ -95,10 +95,10 @@ def build_parser() -> argparse.ArgumentParser:
     sr.add_argument("query")
 
     sv = sub.add_parser("serve", help="run the Phase 2 web UI (FastAPI + HTMX)")
-    sv.add_argument("--host", default="127.0.0.1",
-                    help="bind address (default: 127.0.0.1)")
-    sv.add_argument("--port", type=int, default=8765,
-                    help="bind port (default: 8765)")
+    sv.add_argument("--host", default=None,
+                    help="bind address (default: $PT_HOST or 127.0.0.1)")
+    sv.add_argument("--port", type=int, default=None,
+                    help="bind port (default: $PT_PORT or 8765)")
     return p
 
 
@@ -293,9 +293,13 @@ def cmd_serve(args, store: Store, cfg) -> int:
 
     cfg.ensure_dirs()
     app = create_app(store=store, cfg=cfg)
-    print(f"podcast-transcriber web UI on http://{args.host}:{args.port} "
+    # --host/--port (when given) win over $PT_HOST/$PT_PORT (.env), which in
+    # turn win over the 127.0.0.1:8765 defaults.
+    host = args.host or cfg.host
+    port = args.port or cfg.port
+    print(f"podcast-transcriber web UI on http://{host}:{port} "
           f"(data dir: {cfg.data_dir})", file=sys.stderr)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info")
     return 0
 
 

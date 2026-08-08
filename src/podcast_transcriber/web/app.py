@@ -21,10 +21,12 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
+                               PlainTextResponse, RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .. import __version__
 from ..config import Config, get_config
 from ..download import download_episode
 from ..resolve import resolve as do_resolve
@@ -40,6 +42,7 @@ from ..store import (
 )
 from ..transcribe import transcribe_job
 from . import worker as worker_mod
+from .auth import is_authorized, is_public_path, token_matches, unauthorized_response
 
 log = logging.getLogger(__name__)
 
@@ -218,6 +221,8 @@ def create_app(
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.filters["ts"] = fmt_ts
     templates.env.filters["dt"] = fmt_dt
+    templates.env.globals["auth_enabled"] = bool(cfg.auth_token)
+    templates.env.globals["app_version"] = __version__
     app.state.templates = templates
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -237,8 +242,10 @@ def create_app(
     def store() -> Store:
         return _store_for(app.state.db_path)
 
-    def render(name: str, request: Request, context: Optional[dict] = None):
-        return templates.TemplateResponse(request, name, context or {})
+    def render(name: str, request: Request, context: Optional[dict] = None,
+               status_code: int = 200):
+        return templates.TemplateResponse(request, name, context or {},
+                                          status_code=status_code)
 
     def status_view(job) -> Dict[str, Any]:
         s = store()
@@ -275,8 +282,60 @@ def create_app(
         })
 
     # ------------------------------------------------------------------ #
+    # optional single-user auth (PT_AUTH_TOKEN; Phase 3)
+    # ------------------------------------------------------------------ #
+    auth_token: Optional[str] = cfg.auth_token
+    if auth_token:
+        @app.middleware("http")
+        async def require_auth(request: Request, call_next):
+            if is_public_path(request.url.path) or is_authorized(request, auth_token):
+                return await call_next(request)
+            return unauthorized_response(request)
+
+    # ------------------------------------------------------------------ #
     # routes
     # ------------------------------------------------------------------ #
+    @app.get("/healthz")
+    def healthz():
+        """Liveness + DB reachability probe (always public)."""
+        db_ok = store().ping()
+        payload = {
+            "status": "ok",
+            "version": __version__,
+            "db": "ok" if db_ok else "error",
+        }
+        return JSONResponse(payload, status_code=200 if db_ok else 503)
+
+    @app.get("/login")
+    def login_page(request: Request):
+        if not auth_token:
+            return RedirectResponse("/", status_code=302)
+        return render("login.html", request, {"error": None})
+
+    @app.post("/login")
+    def login_submit(request: Request, token: str = Form("")):
+        if not auth_token:
+            return RedirectResponse("/", status_code=302)
+        if not token_matches(token, auth_token):
+            return render("login.html", request,
+                          {"error": "Invalid token — try again."}, status_code=401)
+        # Only allow local relative redirects (no open-redirect via next=).
+        next_url = request.query_params.get("next", "/")
+        if not next_url.startswith("/") or next_url.startswith("//"):
+            next_url = "/"
+        response = RedirectResponse(next_url, status_code=302)
+        response.set_cookie(
+            "pt_token", auth_token, httponly=True, samesite="lax",
+            max_age=60 * 60 * 24 * 30,  # 30 days
+        )
+        return response
+
+    @app.post("/logout")
+    def logout():
+        response = RedirectResponse("/login", status_code=302)
+        response.delete_cookie("pt_token")
+        return response
+
     @app.get("/")
     def index(request: Request):
         return render("index.html", request)

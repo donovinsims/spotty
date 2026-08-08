@@ -14,6 +14,15 @@ job progress, a readable transcript with search, plain-text/SRT downloads,
 global episode search, and PWA-lite (offline app shell). No cloud APIs, no
 external CDNs; everything runs on this machine.
 
+**Phase 3: deployment & operations.** `scripts/install.sh` installs a launchd
+auto-start service (`com.podcasttranscriber.serve`) with KeepAlive, a
+repo-root `.env.template`, `GET /healthz` liveness + DB probe, optional
+single-user auth (`PT_AUTH_TOKEN`, Bearer header / `?token=` / login cookie),
+and `scripts/tailscale-serve.sh` for iPhone access over Tailscale. See
+[`docs/deployment-runbook.md`](docs/deployment-runbook.md),
+[`docs/rollback.md`](docs/rollback.md) and
+[`docs/architecture.md`](docs/architecture.md).
+
 No SQLAlchemy (stdlib `sqlite3`). Everything lives under this repo.
 
 ## Requirements
@@ -42,9 +51,17 @@ Create a `.env` in the repo root (it is git-ignored) or export env vars.
 |-------------------------|--------------------------------|-----------------------------------------------|
 | `PT_MODEL`              | `mlx-community/whisper-small-mlx` | MLX Whisper model for transcription           |
 | `PT_DATA_DIR`           | `data/`                        | Data directory (DB, audio, cache)             |
+| `PT_HOST`               | `127.0.0.1`                    | `pt serve` bind address                       |
+| `PT_PORT`               | `8765`                         | `pt serve` port                               |
+| `PT_AUTH_TOKEN`         | *(empty)*                      | Single-user auth token; empty = no auth       |
+| `PT_MAX_DOWNLOAD_BYTES` | `1073741824` (1 GiB)           | Max bytes accepted per audio download         |
+| `PT_WORKER_STOP_TIMEOUT`| `5` (s)                        | Worker stop timeout before failing a job      |
 | `PT_CHUNK_MINUTES`      | `10`                           | Duration of each transcription chunk          |
 | `PT_TOP_RESULTS`        | `25`                           | iTunes Search API result limit                |
 | `PT_DURATION_TOLERANCE` | `600` (s)                      | Episodes match duration tolerance             |
+
+`--host`/`--port` on `pt serve` override `PT_HOST`/`PT_PORT`, which override
+the defaults. See `.env.template` for the full commented list.
 
 The MLX model downloads on first use into HuggingFace's cache
 (`~/.cache/huggingface`), so the first transcription needs network.
@@ -61,7 +78,7 @@ pt transcribe <job_id> [--model ...] [--chunk-minutes ...]
 pt status  [job_id]
 pt transcript <job_id> [--json]
 pt search "Lex Fridman"
-pt serve [--host 127.0.0.1] [--port 8765]                # Phase 2 web UI
+pt serve [--host 127.0.0.1] [--port 8765]                # web UI ($PT_HOST/$PT_PORT)
 ```
 
 `resolve` returns a verification state:
@@ -117,9 +134,45 @@ How it works:
   jobs stay PENDING (or QUEUED while the slot is momentarily taken) until the
   active job finishes.
 
-> Access from a phone/Tailscale is Phase 3 (the app is mobile-friendly and
-> iPhone-ready, but the server currently binds to 127.0.0.1 by default).
-> Screenshots: n/a.
+### Optional auth (`PT_AUTH_TOKEN`)
+
+When `PT_AUTH_TOKEN` is set in `.env`, every route except `/healthz`,
+`/static/*`, `/login` and `/logout` requires the token, accepted as
+`Authorization: Bearer <token>`, `?token=<token>`, or the `pt_token` cookie
+set by the `/login` page (unauthenticated browser GETs redirect to `/login`,
+API calls get 401 JSON; comparison is constant-time). Empty/unset ⇒ no auth
+(current single-user behaviour). Generate one with `openssl rand -hex 32`.
+
+## Operations (Phase 3)
+
+```bash
+scripts/install.sh      # create .env if missing, install launchd autostart, start
+scripts/status.sh       # launchd state + GET /healthz probe
+scripts/start.sh        # start the service
+scripts/stop.sh         # stop the service (autostart kept)
+scripts/restart.sh      # stop + start (after .env edits or upgrades)
+scripts/logs.sh         # tail logs/
+scripts/uninstall.sh    # stop + unload + remove the plist
+scripts/tailscale-serve.sh   # idempotent iPhone access over Tailscale (HTTPS)
+```
+
+- `pt serve` runs as a launchd agent (`com.podcasttranscriber.serve`),
+  auto-starts at login, and is restarted by launchd on crash. It loads the
+  repo `.env` itself, so no PT_* values are baked into the plist — edit `.env`
+  and `scripts/restart.sh`.
+- `GET /healthz` (always public) returns
+  `{"status":"ok","version":"0.1.0","db":"ok"}` and is used by
+  `scripts/status.sh`.
+- `scripts/tailscale-serve.sh` enables `tailscale serve --bg 8765` (HTTPS
+  proxy of `127.0.0.1:8765`, tailnet-only) and prints the iPhone URL, e.g.
+  `https://donovins-macbook-pro.taila94639.ts.net:8765`. It never touches
+  other serve entries (e.g. the existing `:20128` proxy).
+- Full runbook: [`docs/deployment-runbook.md`](docs/deployment-runbook.md);
+  rollback: [`docs/rollback.md`](docs/rollback.md); architecture:
+  [`docs/architecture.md`](docs/architecture.md).
+
+> Tailscale `serve` exposes the UI to every device on the tailnet — set
+> `PT_AUTH_TOKEN` first; the iPhone signs in with that token.
 
 ## Data layout
 
@@ -140,7 +193,7 @@ Schema migrations are applied on open (`schema_version` table).
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # full suite (52 tests: 38 Phase 1 + 14 web)
+.venv/bin/python -m pytest -q     # full suite (96 tests: Phase 1/2 + auth)
 .venv/bin/python -m compileall -q src
 ```
 
@@ -148,13 +201,14 @@ The Phase 1 integration test `tests/test_transcribe_resume.py` generates a
 ~30&nbsp;s silence WAV, seeds a completed chunk-0 checkpoint, then runs
 transcription with `mlx-community/whisper-tiny` (downloads the model once) and
 asserts the already completed chunk is skipped (resume works). The Phase 2 web
-tests (`tests/test_web.py`) run fully offline with injected resolve/download/
-transcribe fakes — no network, no model.
+tests (`tests/test_web.py`) and Phase 3 auth tests (`tests/test_auth.py`) run
+fully offline with injected resolve/download/transcribe fakes — no network, no
+model, no launchd, no tailscale.
 
 ## Roadmap (future phases)
 
 - Customer auth, Stripe billing, commission ledger, Twilio + AI receptionist.
-- Tailscale/iPhone access (Phase 3), owner console.
+- Owner console, multi-salon multi-tenancy.
 
 ## License
 

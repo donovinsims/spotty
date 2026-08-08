@@ -109,3 +109,13 @@ def test_transcript_segments(store: Store):
     t = store.get_transcript(j.id)
     assert t.language == "en"
     assert t.segments == 2
+
+def test_ping(store: Store):
+    """/healthz DB probe: trivial SELECT against the open connection."""
+    assert store.ping() is True
+
+
+def test_ping_closed_connection_is_false(tmp_path):
+    s = Store(tmp_path / "closed.db")
+    s.close()
+    assert s.ping() is False

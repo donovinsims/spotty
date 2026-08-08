@@ -19,6 +19,9 @@ MODEL_ENV = "PT_MODEL"
 DATA_DIR_ENV = "PT_DATA_DIR"
 TOP_LISTENERS_ENV = "PT_TOP_RESULTS"
 DURATION_TOLERANCE_ENV = "PT_DURATION_TOLERANCE"
+HOST_ENV = "PT_HOST"
+PORT_ENV = "PT_PORT"
+AUTH_TOKEN_ENV = "PT_AUTH_TOKEN"
 
 # HuggingFace has no `mlx-community/whisper-small`; the mlx-converted repo is
 # `mlx-community/whisper-small-mlx`.
@@ -26,6 +29,8 @@ DEFAULT_MODEL = "mlx-community/whisper-small-mlx"
 DEFAULT_DATA_DIR = "data"
 DEFAULT_TOP_RESULTS = 25
 DEFAULT_DURATION_TOLERANCE = 600.0  # seconds
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8765
 
 _CHUNK_MINUTES_ENV = "PT_CHUNK_MINUTES"
 DEFAULT_CHUNK_MINUTES = 10.0
@@ -56,6 +61,9 @@ class Config:
         duration_tolerance: Optional[float] = None,
         chunk_minutes: Optional[float] = None,
         worker_stop_timeout: Optional[float] = None,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        auth_token: Optional[str] = None,
     ) -> None:
         self.model = model or os.getenv(MODEL_ENV, DEFAULT_MODEL)
         data_dir = data_dir or os.getenv(DATA_DIR_ENV, DEFAULT_DATA_DIR)
@@ -79,6 +87,12 @@ class Config:
             if worker_stop_timeout is not None
             else os.getenv(_WORKER_STOP_TIMEOUT_ENV, DEFAULT_WORKER_STOP_TIMEOUT)
         )
+        # Web UI bind address (Phase 3; also read by the ops scripts).
+        self.host = host or os.getenv(HOST_ENV, DEFAULT_HOST)
+        self.port = int(port if port is not None else os.getenv(PORT_ENV, DEFAULT_PORT))
+        # Optional single-user auth token; empty string / unset disables auth.
+        raw_token = auth_token if auth_token is not None else os.getenv(AUTH_TOKEN_ENV, "")
+        self.auth_token = (raw_token or None)
 
     def ensure_dirs(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)

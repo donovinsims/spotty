@@ -262,6 +262,18 @@ class Store:
     def close(self) -> None:
         self._conn.close()
 
+    def ping(self) -> bool:
+        """Trivial reachability check used by the /healthz endpoint.
+
+        Returns True when a trivial SELECT succeeds against the open
+        connection, False on any sqlite error (e.g. closed/corrupt DB).
+        """
+        try:
+            row = self._conn.execute("SELECT 1").fetchone()
+            return row is not None
+        except sqlite3.Error:
+            return False
+
     # ------------------------------------------------------------------ #
     # episodes
     # ------------------------------------------------------------------ #

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  podcast-transcriber web UI launchd agent (Phase 3).
+
+  TEMPLATE: placeholders (__REPO_DIR__, __HOME_DIR__, __USER_NAME__) are
+  replaced with real values by scripts/install.sh, which writes the result to
+  ~/Library/LaunchAgents/com.podcasttranscriber.serve.plist.
+
+  Environment handling: launchd cannot source `.env`, so this plist only
+  sets the standard PATH/HOME/USER environment.  `pt serve` loads the repo
+  `.env` itself at startup (config.load_env reads the repo-root .env), so
+  PT_* values (PT_PORT, PT_AUTH_TOKEN, ...) are honoured without baking them
+  into the plist -- edit .env and run scripts/restart.sh, no reinstall needed.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.podcasttranscriber.serve</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO_DIR__/.venv/bin/pt</string>
+    <string>serve</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>__HOME_DIR__</string>
+    <key>USER</key>
+    <string>__USER_NAME__</string>
+    <key>LOGNAME</key>
+    <string>__USER_NAME__</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO_DIR__</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+    <key>Crashed</key>
+    <true/>
+  </dict>
+
+  <key>ProcessType</key>
+  <string>Interactive</string>
+
+  <key>ThrottleInterval</key>
+  <integer>3</integer>
+
+  <key>StandardOutPath</key>
+  <string>__REPO_DIR__/logs/serve.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO_DIR__/logs/serve.err.log</string>
+
+  <key>SoftResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key>
+    <integer>8192</integer>
+  </dict>
+
+  <key>ExitTimeOut</key>
+  <integer>10</integer>
+</dict>
+</plist>
