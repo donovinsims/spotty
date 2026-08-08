@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
-from .config import get_config
+from .config import get_config, is_loopback_host
+from .doctor import run_checks
 from .download import DownloadError, download_episode
 from .resolve import resolve as do_resolve
 from .store import (
@@ -34,6 +36,8 @@ from .store import (
     VERIFIED,
 )
 from .transcribe import TranscribeError, transcribe_job
+
+log = logging.getLogger(__name__)
 
 _STATE_COLORS = {
     VERIFIED: "\033[32mVERIFIED\033[0m",
@@ -99,6 +103,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="bind address (default: $PT_HOST or 127.0.0.1)")
     sv.add_argument("--port", type=int, default=None,
                     help="bind port (default: $PT_PORT or 8765)")
+
+    sub.add_parser("doctor", help="run preflight health checks (Phase 4)")
     return p
 
 
@@ -291,12 +297,22 @@ def cmd_serve(args, store: Store, cfg) -> int:
 
     from .web import create_app
 
-    cfg.ensure_dirs()
-    app = create_app(store=store, cfg=cfg)
     # --host/--port (when given) win over $PT_HOST/$PT_PORT (.env), which in
-    # turn win over the 127.0.0.1:8765 defaults.
+    # turn win over the 127.0.0.1:8765 defaults.  Bake the effective bind into
+    # cfg so the app (cookie Secure, no-auth warning) sees the real interface.
     host = args.host or cfg.host
     port = args.port or cfg.port
+    cfg.host = host
+    cfg.port = port
+
+    cfg.ensure_dirs()
+    if not cfg.auth_token and not is_loopback_host(host):
+        log.warning(
+            "WARNING: serving UNAUTHENTICATED on non-loopback interface %s "
+            "(--host). Anyone who can reach %s can submit transcription jobs. "
+            "Set PT_AUTH_TOKEN in .env for tailnet/LAN access.", host, host,
+        )
+    app = create_app(store=store, cfg=cfg)
     print(f"podcast-transcriber web UI on http://{host}:{port} "
           f"(data dir: {cfg.data_dir})", file=sys.stderr)
     uvicorn.run(app, host=host, port=port, log_level="info")
@@ -306,6 +322,10 @@ def cmd_serve(args, store: Store, cfg) -> int:
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = get_config()
+    # `pt doctor` runs before any Store is opened so a broken/read-only DB is
+    # reported by the doctor, not crashed on by main().
+    if args.command == "doctor":
+        return run_checks(cfg)
     cfg.ensure_dirs()
     store = Store(str(cfg.db_path))
     try:

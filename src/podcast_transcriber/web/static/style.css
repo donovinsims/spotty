@@ -302,3 +302,34 @@ td:last-child, th:last-child { padding-right: 20px; }
   .seg { grid-template-columns: 72px 1fr; gap: 8px; font-size: 0.95rem; }
   h1 { font-size: 1.4rem; }
 }
+
+/* ---------- Phase 4: iPhone comfort (targeted, no redesign) ---------- */
+/* Explicit >= 16px body text so iOS never auto-zooms and stays readable. */
+body { font-size: 16px; }
+
+/* Long episode titles / URLs must wrap, never push the layout wide. */
+td { overflow-wrap: anywhere; }
+.meta dd { overflow-wrap: anywhere; }
+a { overflow-wrap: anywhere; }
+
+/* The jobs table scrolls inside its card instead of overflowing the page. */
+.table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 560px) {
+  /* Comfortable tap targets (>= 44px) for nav links and buttons. */
+  .topnav a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 14px;
+  }
+  .btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Progress bar stays visible / chunky on a small screen. */
+  .progress { height: 12px; }
+  .badge { padding: 4px 12px; }
+}

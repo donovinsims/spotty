@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__
-from ..config import Config, get_config
+from ..config import Config, get_config, is_loopback_host
 from ..download import download_episode
 from ..resolve import resolve as do_resolve
 from ..store import (
@@ -43,6 +43,7 @@ from ..store import (
 from ..transcribe import transcribe_job
 from . import worker as worker_mod
 from .auth import is_authorized, is_public_path, token_matches, unauthorized_response
+from .ratelimit import SlidingWindowLimiter
 
 log = logging.getLogger(__name__)
 
@@ -218,10 +219,17 @@ def create_app(
     app.state.cfg = cfg
     app.state.resolve_func = resolve_func
 
+    # Phase 4: per-client-IP sliding-window limiter for POST /jobs.  A fresh
+    # limiter per app instance (tests get an isolated one automatically).
+    limiter = SlidingWindowLimiter(limit_per_min=cfg.rate_limit)
+
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.filters["ts"] = fmt_ts
     templates.env.filters["dt"] = fmt_dt
     templates.env.globals["auth_enabled"] = bool(cfg.auth_token)
+    templates.env.globals["no_auth_warning"] = bool(
+        not cfg.auth_token and not is_loopback_host(cfg.host)
+    )
     templates.env.globals["app_version"] = __version__
     app.state.templates = templates
 
@@ -269,6 +277,38 @@ def create_app(
         if job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         return job
+
+    def client_ip(request: Request) -> str:
+        """Best-effort client IP for rate limiting.
+
+        X-Forwarded-For is honoured ONLY when PT_TRUST_PROXY is set (default:
+        no trust -- a spoofable header must never bypass the limiter).  When
+        trusted, the leftmost (original) address is used.
+        """
+        if cfg.trust_proxy:
+            xff = request.headers.get("x-forwarded-for")
+            if xff:
+                return xff.split(",")[0].strip()
+        if request.client is not None and request.client.host:
+            return request.client.host
+        return "unknown"
+
+    def too_many(request: Request, status_code: int, detail: str,
+                 retry_after: Optional[int] = None):
+        """429/409 responses: error fragment for htmx, error page for browsers,
+        JSON for plain API calls, always with an optional Retry-After."""
+        is_hx = request.headers.get("HX-Request") is not None
+        is_browser = "text/html" in request.headers.get("accept", "")
+        if is_hx or is_browser:
+            template = "fragments/error.html" if is_hx else "error.html"
+            response = render(template, request,
+                              {"status_code": status_code, "detail": detail},
+                              status_code=status_code)
+        else:
+            response = JSONResponse({"detail": detail}, status_code=status_code)
+        if retry_after is not None:
+            response.headers["Retry-After"] = str(retry_after)
+        return response
 
     def submit_area(
         request: Request,
@@ -333,8 +373,13 @@ def create_app(
         if parts.scheme or parts.netloc or "\\" in next_url:
             next_url = "/"
         response = RedirectResponse(next_url, status_code=302)
+        # Secure=True only when NOT on a loopback host: plain-HTTP local use
+        # (127.0.0.1) needs the cookie to travel unencrypted, while an app
+        # bound to a LAN/tailnet interface (0.0.0.0 etc.) should mark it Secure
+        # (Phase 4 hardening).
         response.set_cookie(
             "pt_token", auth_token, httponly=True, samesite="lax",
+            secure=not is_loopback_host(cfg.host),
             max_age=60 * 60 * 24 * 30,  # 30 days
         )
         return response
@@ -353,6 +398,28 @@ def create_app(
     def create_job(request: Request, url: str = Form(...)):
         cfg = app.state.cfg
         url = url.strip()
+
+        # Phase 4: per-IP sliding-window rate limit (before any work -- a bad
+        # URL must still count against the limit so a client cannot spin the
+        # resolver forever).
+        allowed, retry_after = limiter.allow(client_ip(request))
+        if not allowed:
+            return too_many(
+                request, 429,
+                "You are submitting jobs faster than allowed. Wait a moment "
+                "and try again.",
+                retry_after=retry_after,
+            )
+
+        # Phase 4: queue cap -- refuse new jobs once PENDING+QUEUED is full.
+        queued = store().count_queued_jobs()
+        if queued >= cfg.max_queued:
+            return too_many(
+                request, 409,
+                f"{queued} job(s) already queued (limit {cfg.max_queued}). "
+                "Wait for the current transcription to finish, then try again.",
+            )
+
         try:
             res = app.state.resolve_func(
                 url, top_results=cfg.top_results, duration_tolerance=cfg.duration_tolerance

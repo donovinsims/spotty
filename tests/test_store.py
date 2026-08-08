@@ -10,6 +10,7 @@ from podcast_transcriber.store import (
     JOB_COMPLETE,
     JOB_FAILED,
     JOB_PENDING,
+    JOB_QUEUED,
     JOB_RUNNING,
     VERIFIED,
     Episode,
@@ -119,3 +120,25 @@ def test_ping_closed_connection_is_false(tmp_path):
     s = Store(tmp_path / "closed.db")
     s.close()
     assert s.ping() is False
+
+
+def test_schema_version_accessor(store: Store):
+    assert store.schema_version() == 1
+
+
+def test_counts_and_queued_jobs(store: Store):
+    eid = store.upsert_episode(Episode(url="https://x/ep/count", title="C"))
+    job = store.create_job(eid)  # PENDING -> counts as queued
+    assert store.count_episodes() == 1
+    assert store.count_jobs() == 1
+    assert store.count_queued_jobs() == 1
+    # RUNNING no longer counts as queued (it holds the active slot).
+    store.update_job(job.id, status=JOB_RUNNING)
+    assert store.count_queued_jobs() == 0
+    # A QUEUED row counts again.
+    eid2 = store.upsert_episode(Episode(url="https://x/ep/count2", title="D"))
+    store.create_job_queued(eid2)
+    assert store.count_queued_jobs() == 1
+    # Terminal statuses never count.
+    store.update_job(job.id, status=JOB_COMPLETE)
+    assert store.count_queued_jobs() == 1  # the QUEUED one remains

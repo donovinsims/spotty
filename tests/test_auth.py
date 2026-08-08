@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 import pytest
 
-from podcast_transcriber.config import Config
+from podcast_transcriber.config import Config, is_loopback_host
 from podcast_transcriber.resolve import Resolution, SpotifyMeta
 from podcast_transcriber.store import Store
 from podcast_transcriber.verify import VERIFIED, Candidate, VerificationResult
@@ -25,7 +25,8 @@ TOKEN = "test-super-secret-token"
 
 
 def make_app(store: Store, tmp_path, token: str | None = None, **overrides):
-    cfg = Config(data_dir=str(tmp_path / "data"), auth_token=token)
+    host = overrides.pop("host", None)
+    cfg = Config(data_dir=str(tmp_path / "data"), auth_token=token, host=host)
     kwargs = dict(
         resolve_func=lambda url, **kw: Resolution(
             spotify_id="abc",
@@ -88,6 +89,35 @@ def test_config_invalid_port_raises(monkeypatch):
     monkeypatch.setenv("PT_PORT", "not-a-number")
     with pytest.raises(ValueError):
         Config()
+
+
+def test_config_phase4_defaults():
+    cfg = Config()
+    assert cfg.rate_limit == 10
+    assert cfg.max_queued == 50
+    assert cfg.trust_proxy is False
+
+
+def test_config_phase4_env_overrides(monkeypatch):
+    monkeypatch.setenv("PT_RATE_LIMIT_PER_MIN", "3")
+    monkeypatch.setenv("PT_MAX_QUEUED", "7")
+    monkeypatch.setenv("PT_TRUST_PROXY", "true")
+    cfg = Config()
+    assert cfg.rate_limit == 3
+    assert cfg.max_queued == 7
+    assert cfg.trust_proxy is True
+
+
+def test_config_trust_proxy_false_for_junk_values(monkeypatch):
+    monkeypatch.setenv("PT_TRUST_PROXY", "maybe")
+    assert Config().trust_proxy is False
+
+
+def test_is_loopback_host():
+    for host in ("127.0.0.1", "localhost", "::1"):
+        assert is_loopback_host(host) is True
+    for host in ("0.0.0.0", "192.168.1.10", "100.104.98.77", ""):
+        assert is_loopback_host(host) is False
 
 
 # --------------------------------------------------------------------------- #
@@ -330,3 +360,41 @@ def test_pwa_shell_assets_public_with_auth_on(store, tmp_path):
         # ...while the app shell itself still requires auth.
         assert client.get("/", headers={"accept": "text/html"},
                           follow_redirects=False).status_code == 302
+
+
+# --------------------------------------------------------------------------- #
+# Phase 4: cookie Secure flag behaviour
+# --------------------------------------------------------------------------- #
+def test_cookie_secure_on_non_loopback(store, tmp_path):
+    """host=0.0.0.0 -> cookie has Secure flag (bound to LAN/tailnet)."""
+    with TestClient(make_app(store, tmp_path, token=TOKEN,
+                             host="0.0.0.0")) as client:
+        r = client.post("/login", data={"token": TOKEN},
+                        follow_redirects=False)
+    set_cookie = r.headers["set-cookie"]
+    assert "Secure" in set_cookie
+
+
+def test_cookie_no_secure_on_loopback(store, tmp_path):
+    """host=127.0.0.1 -> no Secure flag (plain-HTTP local use)."""
+    with TestClient(make_app(store, tmp_path, token=TOKEN,
+                             host="127.0.0.1")) as client:
+        r = client.post("/login", data={"token": TOKEN},
+                        follow_redirects=False)
+    set_cookie = r.headers["set-cookie"]
+    assert "Secure" not in set_cookie
+
+
+def test_no_auth_warning_global_on_exposed_host(store, tmp_path):
+    """no_auth_warning template global is true when auth is off + host is
+    non-loopback, and the index page renders a warning hint."""
+    app = make_app(store, tmp_path, token=None)  # auth off
+    assert app.state.templates.env.globals["no_auth_warning"] is False   # default 127.0.0.1
+    app2 = make_app(store, tmp_path, token=None, host="0.0.0.0")
+    assert app2.state.templates.env.globals["no_auth_warning"] is True
+
+
+def test_no_auth_warning_absent_when_auth_on(store, tmp_path):
+    """With auth enabled, never warn even on an exposed host."""
+    app = make_app(store, tmp_path, token=TOKEN, host="0.0.0.0")
+    assert app.state.templates.env.globals["no_auth_warning"] is False

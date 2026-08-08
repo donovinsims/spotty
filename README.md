@@ -23,7 +23,46 @@ and `scripts/tailscale-serve.sh` for iPhone access over Tailscale. See
 [`docs/rollback.md`](docs/rollback.md) and
 [`docs/architecture.md`](docs/architecture.md).
 
+**Phase 4: hardening & final polish.** A per-IP rate limit on `POST /jobs`
+(`PT_RATE_LIMIT_PER_MIN`, 429 + Retry-After) and a queue cap
+(`PT_MAX_QUEUED`, 409 "too many jobs queued") keep the single-worker service
+stable; the auth cookie gets the `Secure` flag when the app is bound to a
+non-loopback interface (and a startup warning when auth is off on an exposed
+host); `pt doctor` runs a battery of preflight checks (ffmpeg, disk, DB,
+worker state, Tailscale, launchd, model cache); the UI gets iPhone-focused
+CSS polish plus a visible no-auth hint; and
+[`docs/iphone-test-plan.md`](docs/iphone-test-plan.md) is a manual end-to-end
+checklist for the phone.
+
 No SQLAlchemy (stdlib `sqlite3`). Everything lives under this repo.
+
+## What's where
+
+```
+src/podcast_transcriber/
+├── config.py        PT_* env config (.env from repo root), loopback helper
+├── resolve.py       Spotify URL -> publisher RSS feed -> exact episode match
+├── download.py      Enclosure download w/ ffprobe decode check, size/SSRF guards
+├── transcribe.py    Chunked MLX Whisper transcription, checkpoints + resume
+├── store.py         sqlite3 store (WAL): episodes, jobs, transcripts, segments,
+│                    checkpoints; schema migrations; queued-job counts
+├── verify.py        Verification states (VERIFIED / REVIEW_REQUIRED / UNAVAILABLE)
+├── doctor.py        `pt doctor` preflight checks (Phase 4)
+├── cli.py           `pt` console script (Phase 1 commands + `pt serve` + doctor)
+└── web/
+    ├── app.py       FastAPI app factory: routes, error handlers, auth wiring,
+    │                rate limiter + queue cap (Phase 4)
+    ├── auth.py      Optional token auth (PT_AUTH_TOKEN): Bearer header / cookie
+    ├── ratelimit.py Per-IP sliding-window limiter (stdlib, Phase 4)
+    ├── worker.py    One background thread per database; drains QUEUED/PENDING
+    ├── templates/   Jinja2 (base, index, jobs, job_detail, transcript, login, fragments/*)
+    └── static/      htmx (vendored), style.css, PWA-lite (manifest, sw.js, icons)
+
+scripts/             install/start/stop/restart/status/logs/uninstall/tailscale-serve
+deploy/              launchd plist TEMPLATE (paths baked at install time)
+docs/                architecture, deployment runbook, rollback, iPhone test plan
+data/                SQLite DB, downloaded audio, model cache (git-ignored)
+```
 
 ## Requirements
 
@@ -56,6 +95,9 @@ Create a `.env` in the repo root (it is git-ignored) or export env vars.
 | `PT_AUTH_TOKEN`         | *(empty)*                      | Single-user auth token; empty = no auth       |
 | `PT_MAX_DOWNLOAD_BYTES` | `1073741824` (1 GiB)           | Max bytes accepted per audio download         |
 | `PT_WORKER_STOP_TIMEOUT`| `5` (s)                        | Worker stop timeout before failing a job      |
+| `PT_RATE_LIMIT_PER_MIN` | `10`                           | Max `POST /jobs` per client IP per minute (429 + Retry-After) |
+| `PT_MAX_QUEUED`         | `50`                           | Max PENDING+QUEUED jobs before new submissions are rejected (409) |
+| `PT_TRUST_PROXY`        | `false`                        | Trust `X-Forwarded-For` for rate limiting (only behind your own proxy) |
 | `PT_CHUNK_MINUTES`      | `10`                           | Duration of each transcription chunk          |
 | `PT_TOP_RESULTS`        | `25`                           | iTunes Search API result limit                |
 | `PT_DURATION_TOLERANCE` | `600` (s)                      | Episodes match duration tolerance             |
@@ -79,6 +121,7 @@ pt status  [job_id]
 pt transcript <job_id> [--json]
 pt search "Lex Fridman"
 pt serve [--host 127.0.0.1] [--port 8765]                # web UI ($PT_HOST/$PT_PORT)
+pt doctor                                                # preflight health checks (Phase 4)
 ```
 
 `resolve` returns a verification state:
@@ -145,6 +188,28 @@ cookie set by the `/login` page (unauthenticated browser GETs redirect to
 access logs. Empty/unset ⇒ no auth (current single-user behaviour). Generate
 one with `openssl rand -hex 32`.
 
+The `pt_token` cookie is `HttpOnly`, `SameSite=Lax`, 30-day, and marked
+`Secure` whenever the app is bound to a **non-loopback** interface (e.g.
+`--host 0.0.0.0`); on loopback hosts it stays unencrypted-friendly for plain
+HTTP local use. When auth is off and the app is bound to a non-loopback
+interface, `pt serve` logs a prominent startup warning and the home page shows
+a "No auth" banner.
+
+## Diagnostics: `pt doctor` (Phase 4)
+
+```bash
+.venv/bin/pt doctor
+```
+
+Runs local preflight checks and prints `[PASS]`/`[WARN]`/`[FAIL]` lines:
+Python/venv + `mlx_whisper`, `ffmpeg`/`ffprobe`, data-dir writability + ≥ 1 GiB
+free disk, which `PT_*` vars are set (secrets masked), the SQLite DB (schema
+version, episode/job counts), worker state (RUNNING / PENDING / QUEUED +
+stale-RUNNING hint), Tailscale (node up + our `serve` entry for `PT_PORT`),
+the launchd service, and the model-cache size. Exit code is `0` when nothing
+FAILs, `1` when any check FAILs (WARNs never fail the run). See the runbook
+§7 for what each line means.
+
 ## Operations (Phase 3)
 
 ```bash
@@ -198,7 +263,7 @@ Schema migrations are applied on open (`schema_version` table).
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # full suite (101 tests: Phase 1/2 + auth + security)
+.venv/bin/python -m pytest -q     # full suite (131 tests: Phase 1/2/3 + auth + Phase 4 hardening)
 .venv/bin/python -m compileall -q src
 ```
 
@@ -206,14 +271,16 @@ The Phase 1 integration test `tests/test_transcribe_resume.py` generates a
 ~30&nbsp;s silence WAV, seeds a completed chunk-0 checkpoint, then runs
 transcription with `mlx-community/whisper-tiny` (downloads the model once) and
 asserts the already completed chunk is skipped (resume works). The Phase 2 web
-tests (`tests/test_web.py`) and Phase 3 auth tests (`tests/test_auth.py`) run
-fully offline with injected resolve/download/transcribe fakes — no network, no
-model, no launchd, no tailscale.
+tests (`tests/test_web.py`), Phase 3 auth tests (`tests/test_auth.py`), the
+Phase 4 rate-limit/queue-cap tests (`tests/test_ratelimit.py`) and the doctor
+tests (`tests/test_doctor.py`) run fully offline with injected
+resolve/download/transcribe fakes — no network, no model, no launchd, no
+tailscale.
 
 ## Roadmap (future phases)
 
-- Customer auth, Stripe billing, commission ledger, Twilio + AI receptionist.
 - Owner console, multi-salon multi-tenancy.
+- Customer auth, Stripe billing, commission ledger, Twilio + AI receptionist.
 
 ## License
 

@@ -13,22 +13,29 @@ machine.
 
 ```
 src/podcast_transcriber/
-├── config.py        Env-driven Config (PT_* vars, .env from repo root)
+├── config.py        Env-driven Config (PT_* vars, .env from repo root),
+│                    is_loopback_host() helper (cookie Secure / warnings)
 ├── resolve.py       Spotify URL -> publisher RSS feed -> exact episode match
 ├── download.py      Enclosure download w/ ffprobe decode check, size limit,
 │                    SSRF guard (http(s) only), resume/idempotency
 ├── transcribe.py    Chunked MLX Whisper transcription with per-chunk
 │                    checkpoints + resume
 ├── store.py         sqlite3 store: schema migrations, episodes, jobs,
-│                    transcripts, segments, checkpoints; ping()
+│                    transcripts, segments, checkpoints; ping(),
+│                    schema_version(), count_queued_jobs()
 ├── verify.py        Verification-state logic (VERIFIED / REVIEW_REQUIRED /
 │                    UNAVAILABLE)
-├── cli.py           `pt` console script (Phase 1 commands + `pt serve`)
+├── doctor.py        `pt doctor` preflight checks (Phase 4)
+├── cli.py           `pt` console script (Phase 1 commands + `pt serve` +
+│                    `pt doctor`; startup no-auth warning)
 └── web/
     ├── app.py       FastAPI app factory: routes, error handlers, auth
-    │                middleware wiring
+    │                middleware wiring, rate-limit + queue-cap on POST /jobs,
+    │                Secure cookie flag, no-auth template hint
     ├── auth.py      Optional single-user auth (PT_AUTH_TOKEN): Bearer
     │                header / cookie token checks, constant-time compare
+    ├── ratelimit.py Per-client-IP sliding-window limiter (stdlib deque +
+    │                lock; single-process worker is fine) (Phase 4)
     ├── worker.py    One background thread per database; drains QUEUED/
     │                PENDING jobs oldest-first
     ├── templates/   Jinja2 (base, index, jobs, job_detail, transcript,
@@ -117,7 +124,8 @@ except `/healthz`, `/static/*`, `/sw.js`, `/manifest.webmanifest`, `/login` and
 `/logout`. Token accepted as:
 
 - `Authorization: Bearer <token>` header (scripts/API),
-- `pt_token` cookie (set by the `/login` page, httponly, SameSite=Lax, 30-day).
+- `pt_token` cookie (set by the `/login` page, httponly, SameSite=Lax, 30-day;
+  `Secure` is added when the app binds a non-loopback interface — Phase 4).
 
 (Query-string `?token=` is not accepted — it would leak the credential into
 uvicorn access logs.)
@@ -127,6 +135,27 @@ GETs redirect to `/login?next=<path>`; HTMX/API requests get 401 JSON (HTMX
 also receives `HX-Redirect: /login`). `PT_AUTH_TOKEN` unset/empty ⇒ auth
 disabled, exact Phase 1/2 behaviour. `/healthz` stays public for
 `scripts/status.sh`.
+
+When auth is off and the app binds a non-loopback host, `pt serve` logs a
+prominent startup warning and the home page renders a "no auth" banner.
+
+## Phase 4 operational guards (web/)
+
+- **Rate limit:** `POST /jobs` is limited per client IP to
+  `PT_RATE_LIMIT_PER_MIN` (default 10/min) with a sliding window
+  (`web/ratelimit.py`, stdlib `deque` + lock — fine for a single-process
+  worker). Over the limit → HTTP 429 with a `Retry-After` header (error
+  fragment for htmx, error page for browsers, JSON for API clients). Client IP
+  comes from `request.client`; `X-Forwarded-For` is only trusted when
+  `PT_TRUST_PROXY` is set (default no trust — a spoofable header must never
+  bypass the limiter).
+- **Queue cap:** before resolving, the route rejects new jobs once
+  `count_queued_jobs()` (PENDING + QUEUED) reaches `PT_MAX_QUEUED`
+  (default 50) → HTTP 409 "too many jobs queued".
+- **`pt doctor`** (`doctor.py`) runs preflight checks (Python/mlx_whisper,
+  ffmpeg/ffprobe, disk ≥ 1 GiB, .env masking, DB schema/counts, worker state
+  with stale-RUNNING hint, Tailscale status + serve entry, launchd, model
+  cache) and exits 0 when nothing FAILs, 1 otherwise.
 
 ## launchd service (Phase 3)
 

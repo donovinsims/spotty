@@ -1,8 +1,9 @@
-# Deployment & Operations Runbook (Phase 3)
+# Deployment & Operations Runbook (Phase 3 + Phase 4)
 
 This document covers running podcast-transcriber as a macOS background service
 (launchd), exposing it to an iPhone over Tailscale, and the day-to-day
-operations: start/stop/status, logs, upgrades, and troubleshooting.
+operations: start/stop/status, logs, `pt doctor`, upgrades, and
+troubleshooting (including the Phase 4 rate limit / queue cap).
 
 Everything lives in the repo; there are no cloud dependencies.
 
@@ -53,6 +54,9 @@ plist regeneration.
 | `PT_HOST`               | `127.0.0.1`                    | Bind address for `pt serve`                      |
 | `PT_PORT`               | `8765`                         | Web UI port                                      |
 | `PT_AUTH_TOKEN`         | *(empty)*                      | Single-user auth token; empty = no auth          |
+| `PT_RATE_LIMIT_PER_MIN` | `10`                           | Max `POST /jobs` per client IP per minute (429 + Retry-After) |
+| `PT_MAX_QUEUED`         | `50`                           | Max PENDING+QUEUED jobs before new jobs are rejected (409) |
+| `PT_TRUST_PROXY`        | `false`                        | Trust `X-Forwarded-For` for rate limiting        |
 | `PT_MODEL`              | `mlx-community/whisper-small-mlx` | MLX Whisper model for transcription          |
 | `PT_DATA_DIR`           | `data`                         | SQLite DB + audio + cache directory              |
 | `PT_MAX_DOWNLOAD_BYTES` | `1073741824` (1 GiB)           | Max bytes accepted for episode audio downloads   |
@@ -125,6 +129,14 @@ It prints the iPhone URL, e.g.
 > the tailnet. Set `PT_AUTH_TOKEN` (see `.env.template`) before enabling it —
 > the iPhone will sign in with that token once.
 
+> **Cookie `Secure` flag (Phase 4):** when the app binds to a non-loopback
+> interface (`--host 0.0.0.0`, LAN, etc.), the `pt_token` cookie is set with
+> `Secure`. With the standard setup here (app on `127.0.0.1` + Tailscale HTTPS
+> proxy) the cookie stays `Secure`-less because it travels over the proxy's
+> HTTPS — which is safe. If you bind the app directly to an exposed interface,
+> serve it only over HTTPS (the cookie is `Secure` and plain HTTP won't send
+> it).
+
 To revoke tailnet access for our port only (other proxies untouched):
 
 ```bash
@@ -184,6 +196,26 @@ writer per database by design. If you see lock errors:
 3. As a last resort, back up and remove the WAL/SHM sidecar files
    (`podcast_transcriber.db-wal`, `-shm`) while the service is stopped.
 
+### HTTP 429 "Too many requests" (rate limit)
+
+`POST /jobs` is limited per client IP to `PT_RATE_LIMIT_PER_MIN`
+(default 10) submissions per minute (sliding window). Over the limit you get
+HTTP 429 with a `Retry-After` header. The iPhone/curl client just needs to
+wait — every submission counts, including failed ones, so a script hammering
+the endpoint will 429 for a while. To raise the ceiling, increase
+`PT_RATE_LIMIT_PER_MIN` in `.env` and `scripts/restart.sh`. Only set
+`PT_TRUST_PROXY=true` when the app sits behind a proxy you control (then
+`X-Forwarded-For` is used to identify clients); otherwise the header is
+ignored.
+
+### HTTP 409 "Queue is full"
+
+When `PENDING + QUEUED` jobs reach `PT_MAX_QUEUED` (default 50), new
+submissions are rejected with HTTP 409 ("too many jobs queued") until the
+worker drains some. Wait for the active transcription to finish, or clear
+stuck queued jobs via `pt status` / the job list. `pt doctor` shows the
+waiting-job count.
+
 ### Tailscale down / iPhone can't reach the app
 
 ```bash
@@ -206,11 +238,34 @@ tailnet-specific; confirm it with
 `db` is `"error"` (HTTP 503) when the SQLite store cannot answer a trivial
 `SELECT 1`. `scripts/status.sh` uses this probe.
 
-## 8. Rollback
+## 8. Diagnostics with `pt doctor` (Phase 4)
+
+```bash
+.venv/bin/pt doctor
+```
+
+Runs local preflight checks and prints `[PASS]` / `[WARN]` / `[FAIL]` lines:
+
+| Check            | PASS means…                                                  | WARN means… (does not fail)                              |
+|------------------|--------------------------------------------------------------|----------------------------------------------------------|
+| Python & venv    | `mlx_whisper` imports                                        | model import fails → transcription jobs will fail        |
+| ffmpeg/ffprobe   | both binaries found                                          | — (FAIL when missing)                                    |
+| Data dir & disk  | writable, ≥ 1 GiB free                                       | — (FAIL below 1 GiB)                                     |
+| .env / PT_*      | at least one PT_* var set (values masked)                    | no PT_* set — defaults in use                            |
+| Database         | DB opens, pings, schema v1                                   | — (FAIL when it cannot open/ping)                        |
+| Worker state     | no RUNNING job                                               | RUNNING job(s) — possibly stale, see restart hint        |
+| Tailscale        | CLI found, node up, serve entry for `PT_PORT` present        | CLI missing / node down / no serve entry (run `scripts/tailscale-serve.sh`) |
+| launchd service  | loaded and running                                           | not loaded / loaded but stopped (run `scripts/install.sh`) |
+| Model cache      | sized OK                                                     | —                                                       |
+
+Exit code is `0` when nothing FAILs, `1` when any check FAILs. Run it first
+whenever the iPhone cannot reach the app or a job misbehaves.
+
+## 9. Rollback
 
 See `docs/rollback.md` for a step-by-step rollback to the previous commit.
 
-## 9. Logs & files layout
+## 10. Logs & files layout
 
 ```
 logs/                        # launchd stdout/stderr (serve.out.log / serve.err.log)

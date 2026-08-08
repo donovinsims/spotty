@@ -274,6 +274,19 @@ class Store:
         except sqlite3.Error:
             return False
 
+    def schema_version(self) -> int:
+        """Current applied schema version (0 when the table is missing)."""
+        row = self._conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+        return int(row["version"]) if row else 0
+
+    def count_episodes(self) -> int:
+        row = self._conn.execute("SELECT COUNT(*) AS c FROM episodes").fetchone()
+        return int(row["c"])
+
+    def count_jobs(self) -> int:
+        row = self._conn.execute("SELECT COUNT(*) AS c FROM jobs").fetchone()
+        return int(row["c"])
+
     # ------------------------------------------------------------------ #
     # episodes
     # ------------------------------------------------------------------ #
@@ -526,6 +539,18 @@ class Store:
             ACTIVE_STATUSES,
         ).fetchone()
         return row["c"] > 0
+
+    def count_queued_jobs(self) -> int:
+        """Number of jobs waiting for the single active slot (QUEUED or PENDING).
+
+        This is the count the web layer caps with ``PT_MAX_QUEUED`` before
+        accepting a new job.
+        """
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS c FROM jobs WHERE status IN (?, ?)",
+            (JOB_PENDING, JOB_QUEUED),
+        ).fetchone()
+        return int(row["c"])
 
     def active_jobs(self) -> List[Job]:
         placeholders = ",".join("?" * len(ACTIVE_STATUSES))
