@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<h1>Jobs</h1>
+{% if rows %}
+<div class="card table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Status</th>
+        <th>Episode</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job, episode in rows %}
+      <tr>
+        <td><a href="/jobs/{{ job.id }}">#{{ job.id }}</a></td>
+        <td><span class="badge badge-{{ job.status|lower }}">{{ job.status }}</span></td>
+        <td>{{ episode.title if episode else "—" }}</td>
+        <td class="muted">{{ job.created_at|dt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="muted">No jobs yet — paste a Spotify episode URL on the <a href="/">home page</a>.</p>
+{% endif %}
+{% endblock %}

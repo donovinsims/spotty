@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}New transcription{% endblock %}
+{% block content %}
+{% include "fragments/submit_area.html" %}
+<section class="card">
+  <h2>Search stored episodes</h2>
+  <form class="row"
+        hx-get="/search"
+        hx-target="#episode-results"
+        hx-swap="innerHTML">
+    <input type="search" name="q" placeholder="title, show or URL…" aria-label="Search stored episodes">
+    <button type="submit" class="btn btn-ghost">Search</button>
+  </form>
+  <div id="episode-results"></div>
+</section>
+{% endblock %}

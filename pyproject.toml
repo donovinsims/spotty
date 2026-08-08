@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "podcast-transcriber"
 version = "0.1.0"
-description = "Spotify episode resolver + job queue + chunked MLX Whisper transcription (Phase 1, CLI only)"
+description = "Spotify episode resolver + job queue + chunked MLX Whisper transcription + local FastAPI/HTMX web UI"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -16,6 +16,10 @@ dependencies = [
     "feedparser==6.0.12",
     "pydantic==2.13.3",
     "python-dotenv==1.1.0",
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "python-multipart==0.0.20",
+    "jinja2==3.1.6",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +32,9 @@ pt = "podcast_transcriber.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"podcast_transcriber.web" = ["templates/**/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

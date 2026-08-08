@@ -1,0 +1,15 @@
+{% if q %}
+<div class="search-summary">
+  {% if matches %}
+    <p>{{ matches|length }} matching segment(s) for “{{ q }}”</p>
+  {% else %}
+    <p class="muted">No matches for “{{ q }}”.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% for m in matches %}
+<div class="seg">
+  <span class="ts">{{ m.start_time|ts }}</span>
+  <span class="seg-text">{{ m.highlighted|safe }}</span>
+</div>
+{% endfor %}

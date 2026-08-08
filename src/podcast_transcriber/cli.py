@@ -9,6 +9,7 @@ Subcommands:
   status [JOB_ID]        Show job status and verification info.
   transcript JOB_ID      Print a transcript.
   search QUERY           Search stored episodes.
+  serve                  Run the Phase 2 web UI (FastAPI + HTMX).
 """
 
 from __future__ import annotations
@@ -92,6 +93,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sr = sub.add_parser("search", help="search episodes")
     sr.add_argument("query")
+
+    sv = sub.add_parser("serve", help="run the Phase 2 web UI (FastAPI + HTMX)")
+    sv.add_argument("--host", default="127.0.0.1",
+                    help="bind address (default: 127.0.0.1)")
+    sv.add_argument("--port", type=int, default=8765,
+                    help="bind port (default: 8765)")
     return p
 
 
@@ -279,6 +286,19 @@ def cmd_search(args, store: Store, cfg) -> int:
     return 0
 
 
+def cmd_serve(args, store: Store, cfg) -> int:
+    import uvicorn
+
+    from .web import create_app
+
+    cfg.ensure_dirs()
+    app = create_app(store=store, cfg=cfg)
+    print(f"podcast-transcriber web UI on http://{args.host}:{args.port} "
+          f"(data dir: {cfg.data_dir})", file=sys.stderr)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = get_config()
@@ -301,6 +321,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_transcript(args, store, cfg)
         if args.command == "search":
             return cmd_search(args, store, cfg)
+        if args.command == "serve":
+            return cmd_serve(args, store, cfg)
         return 0
     finally:
         store.close()

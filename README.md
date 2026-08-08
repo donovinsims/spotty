@@ -8,7 +8,13 @@ and its audio enclosure URL is recovered. A simple SQLite-backed job queue drive
 chunked transcription with `mlx-whisper` (Apple Silicon), including per-chunk
 checkpoints and resume.
 
-No cloud APIs. No SQLAlchemy (stdlib `sqlite3`). Everything lives under this repo.
+**Phase 2: local web UI.** A FastAPI + Jinja2/HTMX web app (`pt serve`) drives
+the exact same Phase 1 pipeline — resolve, download, transcribe — with live
+job progress, a readable transcript with search, plain-text/SRT downloads,
+global episode search, and PWA-lite (offline app shell). No cloud APIs, no
+external CDNs; everything runs on this machine.
+
+No SQLAlchemy (stdlib `sqlite3`). Everything lives under this repo.
 
 ## Requirements
 
@@ -55,6 +61,7 @@ pt transcribe <job_id> [--model ...] [--chunk-minutes ...]
 pt status  [job_id]
 pt transcript <job_id> [--json]
 pt search "Lex Fridman"
+pt serve [--host 127.0.0.1] [--port 8765]                # Phase 2 web UI
 ```
 
 `resolve` returns a verification state:
@@ -82,6 +89,38 @@ episode has none yet. If the audio URL is already a local path, the download is
 skipped. For local files you can instead use `pt add-file <path>`, which
 registers the file and creates a job in one step.
 
+## Web UI (Phase 2)
+
+```bash
+.venv/bin/pt serve                    # http://127.0.0.1:8765
+.venv/bin/pt serve --host 0.0.0.0 --port 9000
+```
+
+Open http://127.0.0.1:8765, paste a Spotify episode URL, and watch the job
+progress live (HTMX polling every 2s while PENDING/RUNNING, stopping at
+COMPLETE/FAILED). When done, view the transcript with timestamps, search it
+with highlighted matches, and download it as `.txt` or `.srt`. The home page
+also has a global episode search. The app is PWA-lite: an installable
+manifest, a service worker that caches the app shell for offline start, and
+local icons — no external CDNs (htmx is vendored under
+`src/podcast_transcriber/web/static/`).
+
+How it works:
+
+- `POST /jobs` resolves the URL with the same `resolve()` as `pt resolve
+  --store`. Only `VERIFIED` episodes get a job; `REVIEW_REQUIRED` /
+  `UNAVAILABLE` return the candidates for manual review and create nothing.
+- An in-process worker thread (one per database) picks waiting jobs
+  oldest-first and runs the same `download_episode()` + `transcribe_job()` as
+  the CLI. The Phase 1 single-active-job rule holds: at most one job is
+  RUNNING at a time (DB-enforced), and a second `POST /jobs` simply waits —
+  jobs stay PENDING (or QUEUED while the slot is momentarily taken) until the
+  active job finishes.
+
+> Access from a phone/Tailscale is Phase 3 (the app is mobile-friendly and
+> iPhone-ready, but the server currently binds to 127.0.0.1 by default).
+> Screenshots: n/a.
+
 ## Data layout
 
 ```
@@ -101,19 +140,21 @@ Schema migrations are applied on open (`schema_version` table).
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # full suite (one integration test)
+.venv/bin/python -m pytest -q     # full suite (52 tests: 38 Phase 1 + 14 web)
 .venv/bin/python -m compileall -q src
 ```
 
-The integration test `tests/test_transcribe_resume.py` generates a ~30&nbsp;s
-silence WAV, seeds a completed chunk-0 checkpoint, then runs transcription with
-`mlx-community/whisper-tiny` (downloads the model once) and asserts the already
-completed chunk is skipped (resume works).
+The Phase 1 integration test `tests/test_transcribe_resume.py` generates a
+~30&nbsp;s silence WAV, seeds a completed chunk-0 checkpoint, then runs
+transcription with `mlx-community/whisper-tiny` (downloads the model once) and
+asserts the already completed chunk is skipped (resume works). The Phase 2 web
+tests (`tests/test_web.py`) run fully offline with injected resolve/download/
+transcribe fakes — no network, no model.
 
 ## Roadmap (future phases)
 
-- Owner console / web UI.
 - Customer auth, Stripe billing, commission ledger, Twilio + AI receptionist.
+- Tailscale/iPhone access (Phase 3), owner console.
 
 ## License
 

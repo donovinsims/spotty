@@ -28,6 +28,10 @@ JOB_PENDING = "PENDING"
 JOB_RUNNING = "RUNNING"
 JOB_COMPLETE = "COMPLETE"
 JOB_FAILED = "FAILED"
+#: Web-layer queue slot: used when the single active slot (PENDING/RUNNING) is
+#: already taken.  QUEUED rows are invisible to the partial unique index, so any
+#: number of them may wait; the web worker promotes them to PENDING when free.
+JOB_QUEUED = "QUEUED"
 ACTIVE_STATUSES = (JOB_PENDING, JOB_RUNNING)
 
 # Episode verification states.
@@ -364,6 +368,65 @@ class Store:
         job = self.get_job(job_id)
         assert job is not None
         return job
+
+    def create_job_queued(self, episode_id: int, model: Optional[str] = None,
+                          chunk_minutes: Optional[float] = None) -> Job:
+        """Create a job, queueing it as QUEUED when the single active slot is taken.
+
+        The Phase 1 schema allows at most one PENDING/RUNNING job (partial unique
+        index), so a second concurrent request cannot insert a PENDING row.  We
+        catch that IntegrityError and insert the job with the additive QUEUED
+        status instead; the web worker promotes it when the slot frees.
+        """
+        try:
+            return self.create_job(episode_id, model=model, chunk_minutes=chunk_minutes)
+        except sqlite3.IntegrityError:
+            now = _now()
+
+            def _do(conn: sqlite3.Connection) -> int:
+                cur = conn.execute(
+                    """
+                    INSERT INTO jobs (episode_id, status, model, chunk_minutes, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (episode_id, JOB_QUEUED, model, chunk_minutes, now, now),
+                )
+                return cur.lastrowid
+
+            job_id = self._write(_do)
+            job = self.get_job(job_id)
+            assert job is not None
+            return job
+
+    def next_queued_job(self) -> Optional[Job]:
+        """Oldest job waiting for the single active slot (QUEUED or PENDING)."""
+        row = self._conn.execute(
+            "SELECT * FROM jobs WHERE status IN (?, ?) ORDER BY id LIMIT 1",
+            (JOB_QUEUED, JOB_PENDING),
+        ).fetchone()
+        return Job.from_row(row) if row else None
+
+    def promote_queued_job(self, job_id: int) -> bool:
+        """QUEUED -> PENDING. Returns True when the promotion succeeded.
+
+        Raises sqlite3.IntegrityError if another job already holds the single
+        active slot (the caller must treat that as "slot busy, retry later").
+        """
+
+        def _do(conn: sqlite3.Connection) -> bool:
+            cur = conn.execute(
+                "UPDATE jobs SET status=?, updated_at=? WHERE id=? AND status=?",
+                (JOB_PENDING, _now(), job_id, JOB_QUEUED),
+            )
+            return cur.rowcount == 1
+
+        return self._write(_do)
+
+    def list_jobs_by_created(self, limit: int = 50) -> List[Job]:
+        rows = self._conn.execute(
+            "SELECT * FROM jobs ORDER BY created_at DESC, id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [Job.from_row(r) for r in rows]
 
     def list_jobs(self, limit: int = 50) -> List[Job]:
         rows = self._conn.execute(

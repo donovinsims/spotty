@@ -1,0 +1,17 @@
+{% if q %}<p class="muted">{{ episodes|length }} episode(s) matching “{{ q }}”.</p>{% endif %}
+{% if episodes %}
+<ul class="episode-list">
+  {% for ep in episodes %}
+  <li>
+    <div><strong>{{ ep.title or "Untitled episode" }}</strong></div>
+    <div class="muted">{{ ep.show_name or "Unknown show" }}</div>
+    <div class="row small">
+      <span class="badge badge-{{ ep.state|lower }}">{{ ep.state }}</span>
+      {% if ep_jobs.get(ep.id) %}<a href="/jobs/{{ ep_jobs[ep.id] }}">view job #{{ ep_jobs[ep.id] }}</a>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% elif q %}
+<p class="muted">No episodes match “{{ q }}”.</p>
+{% endif %}

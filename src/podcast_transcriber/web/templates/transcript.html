@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Transcript — Job {{ job.id }}{% endblock %}
+{% block content %}
+<a class="back" href="/jobs/{{ job.id }}">&larr; Job {{ job.id }}</a>
+
+<div class="transcript-header">
+  <h1>{{ episode.title if episode and episode.title else "Transcript" }}</h1>
+  <p class="muted">{{ episode.show_name if episode and episode.show_name else "" }}{% if tx %} · {{ tx.segments }} segments{% endif %}</p>
+</div>
+
+<div class="actions">
+  <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download">Download .txt</a>
+  <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/srt">Download .srt</a>
+</div>
+
+<form class="search-inline"
+      hx-post="/jobs/{{ job.id }}/transcript/search"
+      hx-target="#search-results"
+      hx-swap="innerHTML">
+  <input type="search" name="q" placeholder="Search this transcript…" aria-label="Search this transcript">
+  <button type="submit" class="btn btn-ghost">Search</button>
+</form>
+
+<div id="search-results"></div>
+
+{% if segments %}
+<div class="transcript">
+  {% for seg in segments %}
+  <div class="seg">
+    <span class="ts">{{ seg.start_time|ts }}</span>
+    <span class="seg-text">{{ seg.text }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">No transcript segments yet for this job.</p>
+{% endif %}
+{% endblock %}

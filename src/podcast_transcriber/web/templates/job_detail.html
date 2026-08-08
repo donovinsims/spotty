@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id }}{% endblock %}
+{% block content %}
+<a class="back" href="/jobs">&larr; All jobs</a>
+<h1>Job {{ job.id }}</h1>
+
+<article class="card episode-card">
+  <h2>{{ episode.title if episode and episode.title else "Untitled episode" }}</h2>
+  <p class="muted">{{ episode.show_name if episode and episode.show_name else "Unknown show" }}{% if episode and episode.publisher %} · {{ episode.publisher }}{% endif %}</p>
+  <dl class="meta">
+    <div>
+      <dt>Verification</dt>
+      <dd><span class="badge badge-{{ episode.state|lower if episode else 'unavailable' }}">{{ episode.state if episode else "—" }}</span></dd>
+    </div>
+    {% if episode and episode.confidence is not none %}
+    <div><dt>Confidence</dt><dd>{{ "%.3f"|format(episode.confidence) }}</dd></div>
+    {% endif %}
+    {% if episode and episode.reason %}
+    <div><dt>Reason</dt><dd class="muted">{{ episode.reason }}</dd></div>
+    {% endif %}
+    {% if episode and episode.duration_seconds %}
+    <div><dt>Duration</dt><dd>{{ (episode.duration_seconds / 60)|round(1) }} min</dd></div>
+    {% endif %}
+  </dl>
+</article>
+
+{% include "fragments/status.html" %}
+{% endblock %}

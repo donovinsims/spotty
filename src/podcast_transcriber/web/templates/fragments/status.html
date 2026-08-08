@@ -1,0 +1,27 @@
+<div id="job-status" class="card status-card"
+     {% if view.active %}hx-get="/jobs/{{ job.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <div class="status-row">
+    <span class="badge badge-{{ job.status|lower }}">{{ job.status }}</span>
+    {% if view.last_progress %}<span class="muted progress-line">{{ view.last_progress }}</span>{% endif %}
+  </div>
+
+  {% if job.status == "RUNNING" %}
+    <div class="progress" role="progressbar" aria-valuenow="{{ view.chunks_done }}"
+         aria-valuemin="0" aria-valuemax="{{ view.chunks_total }}">
+      <div class="progress-fill" style="width: {{ view.progress_pct }}%"></div>
+    </div>
+    <p class="muted">{{ view.chunks_done }} / {{ view.chunks_total }} chunks done</p>
+  {% elif job.status == "QUEUED" %}
+    <p class="muted">Waiting — another job is running. This one will start automatically when it finishes.</p>
+  {% elif job.status == "PENDING" %}
+    <p class="muted">Waiting for the worker to pick this up…</p>
+  {% elif job.status == "COMPLETE" %}
+    <p class="ok">Transcription complete — {{ view.segments_count }} segment(s).</p>
+    <div class="actions">
+      <a class="btn" href="/jobs/{{ job.id }}/transcript">View transcript</a>
+      <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download">Download .txt</a>
+    </div>
+  {% elif job.status == "FAILED" %}
+    <p class="err">{{ job.error or "Job failed with no recorded error." }}</p>
+  {% endif %}
+</div>

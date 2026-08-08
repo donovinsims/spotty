@@ -1,0 +1,31 @@
+<section id="submit-area">
+  <h1>Transcribe a Spotify episode</h1>
+  <p class="muted">Paste an episode URL and we resolve it, download the audio,
+    and transcribe it locally with MLX Whisper — nothing leaves this machine.</p>
+  <form class="stack"
+        hx-post="/jobs"
+        hx-target="#submit-area"
+        hx-swap="outerHTML"
+        hx-disabled-elt="button[type=submit]">
+    <label for="url">Spotify episode URL</label>
+    <div class="row">
+      <input id="url" name="url" type="url" required autofocus
+             placeholder="https://open.spotify.com/episode/…"
+             value="{{ submitted_url or '' }}">
+      <button type="submit" class="btn">Transcribe</button>
+    </div>
+  </form>
+  {% if result %}
+  <div class="alert alert-{{ result.kind }}" role="status">
+    <strong>{{ result.headline }}</strong>
+    <p>{{ result.message }}</p>
+    {% if result.candidates %}
+    <ul class="candidates">
+      {% for c in result.candidates %}
+      <li>{{ c.title or c.audio_url or "?" }} — confidence {{ "%.2f"|format(c.confidence) }}{% if c.duration_seconds %} · ~{{ (c.duration_seconds / 60)|round(0)|int }} min{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
