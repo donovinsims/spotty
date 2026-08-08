@@ -8,6 +8,7 @@ background thread against a tmp-path SQLite database.
 from __future__ import annotations
 
 import re
+import sqlite3
 import threading
 import time
 import wave
@@ -17,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from podcast_transcriber.config import Config
+from podcast_transcriber.download import DownloadError
 from podcast_transcriber.resolve import Resolution, SpotifyMeta
 from podcast_transcriber.store import (
     JOB_COMPLETE,
@@ -27,7 +29,7 @@ from podcast_transcriber.store import (
     Episode,
     Store,
 )
-from podcast_transcriber.transcribe import TranscribeError
+from podcast_transcriber.transcribe import TranscribeError, transcribe_job
 from podcast_transcriber.verify import (
     REVIEW_REQUIRED,
     UNAVAILABLE,
@@ -36,11 +38,14 @@ from podcast_transcriber.verify import (
     VerificationResult,
 )
 from podcast_transcriber.web import create_app
+from podcast_transcriber.web.worker import Worker
 
 URL1 = "https://open.spotify.com/episode/aaaaaaaaaa"
 URL2 = "https://open.spotify.com/episode/bbbbbbbbbb"
 EP1 = "My Test Episode"
 EP2 = "Another Test Episode"
+
+SW_PATH = Path(__file__).resolve().parents[1] / "src" / "podcast_transcriber" / "web" / "static" / "sw.js"
 
 
 def make_wav(path: Path, seconds: float = 1.0) -> Path:
@@ -289,13 +294,37 @@ def test_post_jobs_invalid_url_shows_error(store, tmp_path):
 # status fragment
 # --------------------------------------------------------------------------- #
 def test_status_fragment_shows_progress(store, tmp_path):
+    """A RUNNING job renders progress + keeps polling.  The worker claims the
+    job and holds it (blocking transcribe) so the fragment is deterministic
+    (the lifespan crash-recovery sweep would otherwise reset a pre-seeded
+    RUNNING job to PENDING)."""
+    release = threading.Event()
+
+    def holding_transcribe(store_, job_id, *, model=None, chunk_minutes=None,
+                           progress=None):
+        for other in store_.active_jobs():
+            if other.id != job_id:
+                raise TranscribeError(f"job {other.id} is already active")
+        assert store_.claim_job(job_id), "worker must win the claim"
+        store_.update_job(job_id, chunk_count=4)
+        release.wait(10)
+        store_.update_job(job_id, status=JOB_COMPLETE)
+        return {"job_id": job_id}
+
     eid = store.upsert_episode(Episode(url=URL1, title=EP1))
     job = store.create_job(eid)
-    store.update_job(job.id, status=JOB_RUNNING, chunk_count=4)
-    store.set_checkpoint(job.id, 0, "done")
-    store.set_checkpoint(job.id, 1, "done")
-    with TestClient(make_app(store, tmp_path)) as client:
+    with TestClient(make_app(store, tmp_path,
+                             transcribe_func=holding_transcribe)) as client:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if store.get_job(job.id).status == JOB_RUNNING:
+                break
+            time.sleep(0.02)
+        assert store.get_job(job.id).status == JOB_RUNNING
+        store.set_checkpoint(job.id, 0, "done")
+        store.set_checkpoint(job.id, 1, "done")
         r = client.get(f"/jobs/{job.id}/status")
+        release.set()
     assert r.status_code == 200
     assert "RUNNING" in r.text
     assert "2 / 4" in r.text
@@ -399,3 +428,354 @@ def test_pwa_assets(store, tmp_path):
         manifest = client.get("/manifest.webmanifest").json()
         assert manifest["display"] == "standalone"
         assert manifest["start_url"] == "/"
+
+
+# --------------------------------------------------------------------------- #
+# F1: service worker caches ONLY the shell (never dynamic pages/fragments)
+# --------------------------------------------------------------------------- #
+def test_sw_js_intercepts_shell_only():
+    sw = SW_PATH.read_text()
+    # cache version bumped so previously-installed workers refresh
+    assert "pt-shell-v2" in sw
+    # the decision function exists and returns null for non-shell paths
+    assert "function ptCacheStrategy" in sw
+    assert "return null;" in sw
+    # the fetch handler routes non-shell requests to the network default
+    assert "strategy === null" in sw
+    # shell assets still listed
+    assert "/static/" in sw
+    assert "manifest.webmanifest" in sw
+
+
+def test_sw_caches_shell_but_not_dynamic_status(store, tmp_path):
+    """Simulate the service worker's cache semantics against the live app:
+    the shell (/) is cached; the dynamic /jobs/<id>/status fragment is never
+    cached, so polled state always comes back fresh."""
+    sw = SW_PATH.read_text()
+    m = re.search(r"const SHELL = \[(.*?)\];", sw, re.S)
+    assert m, "SHELL array not found in sw.js"
+    shell_paths = {p.strip().strip('"') for p in m.group(1).split(",") if p.strip()}
+
+    def strategy(pathname: str):
+        # Mirror sw.js ptCacheStrategy
+        if pathname == "/":
+            return "network-first"
+        if pathname in shell_paths or pathname.startswith("/static/"):
+            return "cache-first"
+        return None
+
+    cache: dict = {}
+    release = threading.Event()
+
+    def holding_transcribe(store_, job_id, *, model=None, chunk_minutes=None,
+                           progress=None):
+        for other in store_.active_jobs():
+            if other.id != job_id:
+                raise TranscribeError(f"job {other.id} is already active")
+        assert store_.claim_job(job_id)
+        release.wait(10)
+        store_.update_job(job_id, status=JOB_COMPLETE)
+        return {"job_id": job_id}
+
+    eid = store.upsert_episode(Episode(url=URL1, title=EP1))
+    with TestClient(make_app(store, tmp_path,
+                             transcribe_func=holding_transcribe)) as client:
+        # Shell is cached by the SW.
+        for path in ("/", "/static/style.css", "/manifest.webmanifest"):
+            r = client.get(path)
+            assert r.status_code == 200
+            assert strategy(path) is not None, path
+            cache[path] = r.text
+        assert "/" in cache
+
+        job = store.create_job(eid)
+        # The worker claims it (RUNNING) and holds it.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if store.get_job(job.id).status == JOB_RUNNING:
+                break
+            time.sleep(0.02)
+        assert store.get_job(job.id).status == JOB_RUNNING
+
+        status_url = f"/jobs/{job.id}/status"
+        assert strategy(status_url) is None  # excluded by the SW
+        r = client.get(status_url)
+        assert "RUNNING" in r.text
+        assert status_url not in cache  # never cached
+
+        # State changes between polls -> next poll returns the NEW content.
+        release.set()
+        wait_for(store, job.id, JOB_COMPLETE)
+        r2 = client.get(status_url)
+        assert "COMPLETE" in r2.text
+        assert "RUNNING" not in r2.text
+        assert status_url not in cache
+
+
+# --------------------------------------------------------------------------- #
+# F2: crash recovery (stale RUNNING sweep) + worker stop semantics
+# --------------------------------------------------------------------------- #
+def test_lifespan_recovers_stale_running_job(store, tmp_path):
+    """A RUNNING job left by a killed process is swept to PENDING on startup
+    and drains to COMPLETE (single-active slot unblocked)."""
+    eid = store.upsert_episode(Episode(url=URL1, title=EP1))
+    job = store.create_job(eid)
+    store.update_job(job.id, status=JOB_RUNNING, error="stale error from crash")
+    with TestClient(make_app(store, tmp_path)) as client:
+        wait_for(store, job.id, JOB_COMPLETE)
+    assert store.get_job(job.id).status == JOB_COMPLETE
+    assert store.get_job(job.id).error is None  # sweep cleared the stale error
+
+
+def test_lifespan_recovers_stale_running_and_drains_queued(store, tmp_path):
+    """Stale RUNNING + a waiting PENDING + a QUEUED job all drain after the
+    recovery sweep (the stale job re-queues behind the waiting PENDING one)."""
+    eid1 = store.upsert_episode(Episode(url=URL1, title=EP1))
+    job1 = store.create_job(eid1)
+    store.update_job(job1.id, status=JOB_RUNNING)
+    # With the slot RUNNING, a second job can still become PENDING (the index
+    # allows one PENDING + one RUNNING)...
+    eid2 = store.upsert_episode(Episode(url=URL2, title=EP2))
+    job2 = store.create_job(eid2)
+    assert store.get_job(job2.id).status == JOB_PENDING
+    # ...and a third queues as QUEUED while a PENDING job holds the slot.
+    eid3 = store.upsert_episode(Episode(url=URL2 + "3", title=EP2))
+    job3 = store.create_job_queued(eid3)
+    assert store.get_job(job3.id).status == JOB_QUEUED
+
+    with TestClient(make_app(store, tmp_path)) as client:
+        wait_for(store, job1.id, JOB_COMPLETE)
+        wait_for(store, job2.id, JOB_COMPLETE)
+        wait_for(store, job3.id, JOB_COMPLETE)
+    assert store.get_job(job1.id).status == JOB_COMPLETE
+    assert store.get_job(job2.id).status == JOB_COMPLETE
+    assert store.get_job(job3.id).status == JOB_COMPLETE
+
+
+def test_worker_stop_marks_inflight_job_failed(store, tmp_path):
+    """Worker.stop() with an in-flight job that cannot finish in time marks it
+    FAILED ("server shutdown") instead of abandoning it RUNNING."""
+    release = threading.Event()
+
+    def stuck_transcribe(store_, job_id, *, model=None, chunk_minutes=None,
+                         progress=None):
+        store_.claim_job(job_id)
+        release.wait(30)  # never finishes on its own
+
+    eid = store.upsert_episode(Episode(url=URL1, title=EP1))
+    job = store.create_job(eid)
+    cfg = Config(data_dir=str(tmp_path / "data"))
+    w = Worker(store.db_path, cfg, download_func=fake_download,
+               transcribe_func=stuck_transcribe)
+    w.start()
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if store.get_job(job.id).status == JOB_RUNNING:
+                break
+            time.sleep(0.02)
+        assert store.get_job(job.id).status == JOB_RUNNING
+        w.stop(timeout=0.3)
+        job = store.get_job(job.id)
+        assert job.status == JOB_FAILED
+        assert "server shutdown" in job.error
+    finally:
+        release.set()
+        w.stop()
+
+
+# --------------------------------------------------------------------------- #
+# F3: slot-busy race must never mark a job FAILED
+# --------------------------------------------------------------------------- #
+def test_worker_slot_race_leaves_job_pending(store, tmp_path):
+    """Job B stays PENDING (never FAILED) when another process holds the
+    single active slot; it drains once the slot frees.  The Worker is driven
+    directly (not via the app) so the lifespan recovery sweep cannot reset the
+    deliberately-RUNNING job A."""
+    eid_a = store.upsert_episode(Episode(url=URL1, title=EP1))
+    job_a = store.create_job(eid_a)
+    eid_b = store.upsert_episode(Episode(url=URL2, title=EP2))
+    job_b = store.create_job_queued(eid_b)  # PENDING slot -> QUEUED
+
+    # A second Store connection = a concurrent process (e.g. Phase 1 CLI).
+    s2 = Store(store.db_path)
+    try:
+        s2.update_job(job_a.id, status=JOB_RUNNING)
+
+        def race_transcribe(store_, job_id, *, model=None, chunk_minutes=None,
+                            progress=None):
+            # Mirror the transcribe_job claim race: claim directly (no guard
+            # pre-check), so the partial-unique-index IntegrityError fires.
+            if not store_.claim_job(job_id):
+                raise TranscribeError(f"job {job_id} not pending")
+            store_.update_job(job_id, status=JOB_COMPLETE)
+            return {"job_id": job_id}
+
+        cfg = Config(data_dir=str(tmp_path / "data"))
+        w = Worker(store.db_path, cfg, download_func=fake_download,
+                   transcribe_func=race_transcribe)
+        w.start()
+        try:
+            time.sleep(1.5)  # let the worker try (and fail) to claim job B
+            b = store.get_job(job_b.id)
+            assert b.status == JOB_PENDING, \
+                f"job B must stay PENDING; got {b.status}"
+            assert b.error is None, b.error
+            # Free the slot -> job B now drains.
+            s2.update_job(job_a.id, status=JOB_COMPLETE)
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                if store.get_job(job_b.id).status == JOB_COMPLETE:
+                    break
+                time.sleep(0.05)
+            assert store.get_job(job_b.id).status == JOB_COMPLETE
+        finally:
+            w.stop()
+    finally:
+        s2.close()
+
+
+def test_transcribe_job_converts_slot_race_integrity_error(store, tmp_path,
+                                                           monkeypatch):
+    """transcribe_job's claim path converts the partial-unique-index
+    IntegrityError into TranscribeError, leaving the job PENDING."""
+    wav = make_wav(tmp_path / "clip.wav")
+    eid = store.upsert_episode(Episode(url=URL1, title=EP1, audio_url=str(wav)))
+    job = store.create_job(eid)
+
+    monkeypatch.setattr(store, "active_jobs", lambda: [])
+
+    def boom_claim(job_id):
+        raise sqlite3.IntegrityError("UNIQUE constraint failed: jobs.status")
+
+    monkeypatch.setattr(store, "claim_job", boom_claim)
+
+    with pytest.raises(TranscribeError, match="slot is busy"):
+        transcribe_job(store, job.id, chunk_minutes=1)
+    assert store.get_job(job.id).status == JOB_PENDING
+    assert store.get_job(job.id).error is None
+
+
+# --------------------------------------------------------------------------- #
+# F5: worker failure paths
+# --------------------------------------------------------------------------- #
+def test_worker_marks_failed_when_transcribe_raises(store, tmp_path):
+    """A transcribe failure after the claim marks the job FAILED with the
+    error, and the status fragment renders it."""
+    def boom_transcribe(store_, job_id, *, model=None, chunk_minutes=None,
+                        progress=None):
+        store_.claim_job(job_id)
+        raise RuntimeError("boom in transcribe")
+
+    eid = store.upsert_episode(Episode(url=URL1, title=EP1))
+    job = store.create_job(eid)
+    with TestClient(make_app(store, tmp_path,
+                             transcribe_func=boom_transcribe)) as client:
+        wait_for(store, job.id, JOB_FAILED)
+        job = store.get_job(job.id)
+        assert "boom in transcribe" in job.error
+        r = client.get(f"/jobs/{job.id}/status")
+        assert "FAILED" in r.text
+        assert "boom in transcribe" in r.text
+
+
+def test_worker_marks_failed_on_download_error(store, tmp_path):
+    def bad_download(store_, episode_id, audio_dir, *, progress=None, **kwargs):
+        raise DownloadError("bad audio source")
+
+    eid = store.upsert_episode(Episode(
+        url=URL1, title=EP1, audio_url="https://cdn.example.test/bad.mp3"))
+    job = store.create_job(eid)
+    with TestClient(make_app(store, tmp_path,
+                             download_func=bad_download)) as client:
+        wait_for(store, job.id, JOB_FAILED)
+        job = store.get_job(job.id)
+        assert job.error == "bad audio source"
+
+
+# --------------------------------------------------------------------------- #
+# F6: raw exception text must not reach the UI
+# --------------------------------------------------------------------------- #
+def test_resolve_failure_hides_internal_detail(store, tmp_path):
+    def explode_resolve(url, **kwargs):
+        raise RuntimeError("https://internal.corp/secret exploded")
+
+    with TestClient(make_app(store, tmp_path,
+                             resolve_func=explode_resolve)) as client:
+        r = client.post("/jobs", data={"url": URL1})
+    assert r.status_code == 200
+    assert "Resolution failed" in r.text
+    assert "internal.corp" not in r.text
+    assert "exploded" not in r.text
+
+
+# --------------------------------------------------------------------------- #
+# F9: search highlight must survive HTML entities
+# --------------------------------------------------------------------------- #
+def test_search_highlight_survives_entities(store, tmp_path):
+    eid = store.upsert_episode(Episode(url=URL1, title=EP1))
+    job = store.create_job(eid)
+    store.update_job(job.id, status=JOB_COMPLETE)
+    tx = store.upsert_transcript(job.id, eid, "en")
+    store.add_segment(job.id, tx, 0, 0.0, 2.0, "Our R&D team ships weekly.")
+    with TestClient(make_app(store, tmp_path)) as client:
+        r = client.post(f"/jobs/{job.id}/transcript/search", data={"q": "&"})
+    assert r.status_code == 200
+    assert "<mark>&amp;</mark>" in r.text
+    assert "R<mark>&amp;</mark>D" in r.text
+
+
+# --------------------------------------------------------------------------- #
+# F10: 422 / 500 handlers (HTMX-aware)
+# --------------------------------------------------------------------------- #
+def test_422_renders_error_page(store, tmp_path):
+    with TestClient(make_app(store, tmp_path)) as client:
+        r = client.post("/jobs", data={})  # missing url form field
+    assert r.status_code == 422
+    assert "422" in r.text
+    assert "Invalid request parameters" in r.text
+
+
+def test_422_htmx_returns_fragment(store, tmp_path):
+    with TestClient(make_app(store, tmp_path)) as client:
+        r = client.post("/jobs", data={}, headers={"HX-Request": "true"})
+    assert r.status_code == 422
+    assert "Invalid request parameters" in r.text
+    assert "<html" not in r.text  # fragment, not the full page
+
+
+def test_500_renders_error_page_and_hides_detail(store, tmp_path):
+    app = make_app(store, tmp_path)
+
+    @app.get("/boom")
+    def boom():
+        raise RuntimeError("kaboom internal detail")
+
+    # ServerErrorMiddleware always re-raises for test clients unless told not
+    # to; the response (rendered by our handler) is what we assert on.
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.get("/boom")
+    assert r.status_code == 500
+    assert "Internal server error" in r.text
+    assert "kaboom" not in r.text
+
+
+# --------------------------------------------------------------------------- #
+# F11: tracking params must not duplicate episodes
+# --------------------------------------------------------------------------- #
+def test_episode_url_deduped_across_tracking_params(store, tmp_path):
+    wav = make_wav(tmp_path / "clip.wav")
+    ver_resolution = resolution(URL1)
+    ver_resolution.result.audio_url = str(wav)
+
+    def local_resolve(url, **kwargs):
+        ver_resolution.source_url = url  # echo the pasted URL (with params)
+        return ver_resolution
+
+    with TestClient(make_app(store, tmp_path,
+                             resolve_func=local_resolve)) as client:
+        client.post("/jobs", data={"url": URL1 + "?si=abc123&utm_source=share"})
+        client.post("/jobs", data={"url": URL1})
+    eps = store.find_episodes(EP1)
+    assert len(eps) == 1
+    assert eps[0].url == URL1

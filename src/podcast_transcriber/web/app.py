@@ -11,13 +11,16 @@ the same database file (WAL allows concurrent readers + one writer).
 from __future__ import annotations
 
 import html as html_mod
+import logging
 import re
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -37,6 +40,8 @@ from ..store import (
 )
 from ..transcribe import transcribe_job
 from . import worker as worker_mod
+
+log = logging.getLogger(__name__)
 
 _WEB_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = _WEB_DIR / "templates"
@@ -90,7 +95,14 @@ def fmt_srt(seconds: Optional[float]) -> str:
 
 
 def _highlight_matches(segments: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
-    """Segments containing `query`, with matches wrapped in <mark> (escaped)."""
+    """Segments containing `query`, with matches wrapped in <mark> (escaped).
+
+    Matching happens against the RAW text (so entities like ``&`` match), then
+    the whole string is HTML-escaped once and the match boundaries -- marked
+    with sentinel control characters that ``html.escape`` leaves untouched --
+    become <mark> tags.  This keeps both the surrounding text and the match
+    itself safely escaped for ``|safe`` rendering.
+    """
     query = (query or "").strip()
     if not query:
         return []
@@ -101,8 +113,11 @@ def _highlight_matches(segments: List[Dict[str, Any]], query: str) -> List[Dict[
         text = seg.get("text") or ""
         if lowered not in text.lower():
             continue
-        highlighted = pattern.sub(
-            lambda m: f"<mark>{m.group(0)}</mark>", html_mod.escape(text)
+        marked = pattern.sub(lambda m: "\x00" + m.group(0) + "\x01", text)
+        highlighted = (
+            html_mod.escape(marked)
+            .replace("\x00", "<mark>")
+            .replace("\x01", "</mark>")
         )
         out.append(
             {
@@ -113,6 +128,36 @@ def _highlight_matches(segments: List[Dict[str, Any]], query: str) -> List[Dict[
             }
         )
     return out
+
+
+#: Query params dropped before storing an episode URL so the same episode
+#: pasted with different share/tracking parameters maps to one Episode row
+#: (episodes.url has ON CONFLICT(url) dedup).
+_TRACKING_PARAMS = {
+    "si", "gclid", "fbclid", "dclid", "msclkid", "mc_cid", "mc_eid",
+    "igshid", "s_kwcid", "wt_mc", "yclid",
+}
+
+
+def canonical_episode_url(url: str) -> str:
+    """Strip tracking params (Spotify si=, utm_*, click IDs) from an episode URL.
+
+    Keeps every other query param so the URL stays functionally equivalent.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    if not parts.query:
+        return url
+    keep = [
+        (k, v)
+        for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        if k.lower() not in _TRACKING_PARAMS and not k.lower().startswith("utm_")
+    ]
+    return urlunsplit(
+        (parts.scheme, parts.netloc, parts.path, urlencode(keep), parts.fragment)
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -137,6 +182,21 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Crash recovery: a RUNNING job left behind by a killed process would
+        # otherwise deadlock the single-active-job slot forever (partial unique
+        # index).  Safe under the single-writer-per-DB assumption -- at this
+        # point no other process is mid-transcription against this database.
+        try:
+            recover = Store(db_path)
+            try:
+                n = recover.recover_stale_running()
+                if n:
+                    log.warning("recovered %d stale RUNNING job(s) -> PENDING", n)
+            finally:
+                recover.close()
+        except Exception:  # noqa: BLE001 - startup must not fail on a sweep
+            log.exception("stale-RUNNING recovery sweep failed")
+
         w = worker_mod.get_worker(
             db_path,
             cfg,
@@ -148,7 +208,7 @@ def create_app(
         try:
             yield
         finally:
-            worker_mod.stop_worker(db_path)
+            worker_mod.stop_worker(db_path, timeout=cfg.worker_stop_timeout)
 
     app = FastAPI(title="podcast-transcriber", lifespan=lifespan)
     app.state.db_path = db_path
@@ -235,11 +295,17 @@ def create_app(
                 "headline": "Not a Spotify episode URL",
                 "message": str(exc),
             })
-        except Exception as exc:  # noqa: BLE001 - network/resolver failure
+        except Exception:  # noqa: BLE001 - network/resolver failure
+            # Do not surface the raw exception (it can contain internal URLs /
+            # hostnames); log the detail server-side instead.
+            log.exception("resolution failed for %r", url)
             return submit_area(request, submitted_url=url, result={
                 "kind": "error",
                 "headline": "Resolution failed",
-                "message": f"{exc}",
+                "message": (
+                    "Could not resolve that episode. Check the URL and try "
+                    "again — the server log has the technical detail."
+                ),
             })
 
         result = res.result
@@ -260,7 +326,9 @@ def create_app(
         meta = res.metadata
         ep = Episode(
             spotify_id=res.spotify_id,
-            url=res.source_url,
+            # Store the canonical URL (tracking params stripped) so the same
+            # episode pasted with/without ?si=... dedups to one row.
+            url=canonical_episode_url(res.source_url),
             title=meta.episode_title,
             show_name=meta.show_name,
             rss_url=res.feed_url,
@@ -387,18 +455,43 @@ def create_app(
             "ep_jobs": job_by_episode,
         })
 
+    # ------------------------------------------------------------------ #
+    # error handlers (HTMX-aware: fragments for htmx requests)
+    # ------------------------------------------------------------------ #
+    def _error_response(request: Request, status_code: int, detail: str,
+                        status: int) -> HTMLResponse:
+        """Render error.html (full page) or the error fragment for htmx."""
+        template = (
+            "fragments/error.html"
+            if request.headers.get("HX-Request")
+            else "error.html"
+        )
+        return templates.TemplateResponse(
+            request,
+            template,
+            {"status_code": status_code, "detail": detail},
+            status_code=status,
+        )
+
     @app.exception_handler(HTTPException)
     def http_exception_handler(request: Request, exc: HTTPException):
         if exc.status_code in (404, 500):
-            return templates.TemplateResponse(
-                request,
-                "error.html",
-                {"status_code": exc.status_code, "detail": exc.detail},
-                status_code=exc.status_code,
-            )
+            return _error_response(request, exc.status_code, str(exc.detail),
+                                   exc.status_code)
         return HTMLResponse(
             f"<h1>{exc.status_code}</h1><p>{html_mod.escape(str(exc.detail))}</p>",
             status_code=exc.status_code,
         )
+
+    @app.exception_handler(RequestValidationError)
+    def validation_exception_handler(request: Request, exc: RequestValidationError):
+        log.warning("validation error on %s: %s", request.url.path, exc.errors())
+        return _error_response(request, 422, "Invalid request parameters.", 422)
+
+    @app.exception_handler(Exception)
+    def unhandled_exception_handler(request: Request, exc: Exception):
+        # Log the full traceback; the client sees only a generic message.
+        log.exception("unhandled error on %s", request.url.path)
+        return _error_response(request, 500, "Internal server error.", 500)
 
     return app

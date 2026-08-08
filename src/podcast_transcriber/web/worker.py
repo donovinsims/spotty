@@ -29,7 +29,13 @@ from typing import Callable, Dict, Optional
 
 from ..config import Config
 from ..download import DownloadError, download_episode
-from ..store import JOB_FAILED, JOB_PENDING, JOB_QUEUED, Store
+from ..store import (
+    JOB_FAILED,
+    JOB_PENDING,
+    JOB_QUEUED,
+    JOB_RUNNING,
+    Store,
+)
 from ..transcribe import TranscribeError, transcribe_job
 
 log = logging.getLogger(__name__)
@@ -70,6 +76,7 @@ class Worker:
         self._transcribe_func = transcribe_func
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._start_lock = threading.Lock()
         # The worker's own Store is created lazily INSIDE the worker thread so
         # the sqlite3 connection belongs to the thread that uses it.
         self._store: Optional[Store] = None
@@ -82,20 +89,54 @@ class Worker:
         return self._thread is not None and self._thread.is_alive()
 
     def start(self) -> None:
-        if self.running:
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(
-            target=self._run, name="pt-web-worker", daemon=True
-        )
-        self._thread.start()
-        log.info("web worker started for %s", self._db_path)
+        # Guarded: two callers racing here could spawn two worker threads
+        # against the same database (F7).
+        with self._start_lock:
+            if self.running:
+                return
+            self._stop.clear()
+            self._thread = threading.Thread(
+                target=self._run, name="pt-web-worker", daemon=True
+            )
+            self._thread.start()
+            log.info("web worker started for %s", self._db_path)
 
     def stop(self, timeout: float = 3.0) -> None:
+        """Stop the worker.
+
+        Waits up to ``timeout`` seconds for an in-flight job to reach a
+        terminal state.  If it is still RUNNING after the timeout (e.g. a wedged
+        download/transcribe), mark it FAILED with a "server shutdown" reason so
+        the next boot does not deadlock the single-active-job slot, then give
+        the thread one more beat to notice and exit.  The worker's Store is
+        closed once the worker thread has fully exited (F8).
+        """
         self._stop.set()
-        if self._thread is not None and self._thread.is_alive():
-            self._thread.join(timeout=timeout)
+        thread = self._thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                log.warning(
+                    "web worker still busy after %.1fs; marking in-flight "
+                    "jobs FAILED", timeout
+                )
+                self._fail_inflight("server shutdown: job interrupted by worker stop")
+                thread.join(timeout=1.0)
         self._thread = None
+
+    def _fail_inflight(self, reason: str) -> None:
+        """Mark any RUNNING job FAILED, using a fresh Store (this thread)."""
+        try:
+            s = Store(self._db_path)
+            try:
+                for job in s.active_jobs():
+                    if job.status == JOB_RUNNING:
+                        s.update_job(job.id, status=JOB_FAILED, error=reason)
+                        log.warning("job %s marked FAILED: %s", job.id, reason)
+            finally:
+                s.close()
+        except Exception:  # noqa: BLE001 - shutdown must not raise
+            log.exception("failed to mark in-flight job(s) FAILED")
 
     # ------------------------------------------------------------------ #
     # main loop
@@ -131,6 +172,15 @@ class Worker:
             if current is not None and current.status == JOB_PENDING:
                 self._stop.wait(1.0)
         log.info("web worker loop stopped for %s", self._db_path)
+        # Close this thread's own Store here: sqlite3 connections may only be
+        # used (and closed) by the thread that created them (F8).
+        store = self._store
+        self._store = None
+        if store is not None:
+            try:
+                store.close()
+            except Exception:  # noqa: BLE001 - loop exit must not raise
+                log.exception("error closing web worker store")
 
     def _process(self, job_id: int) -> None:
         """Run download + transcribe for one PENDING job.
@@ -174,6 +224,13 @@ class Worker:
             current = store.get_job(job_id)
             if current is not None and current.status == JOB_FAILED:
                 log.info("job %s failed", job_id)
+        except sqlite3.IntegrityError:
+            # Another process holds the single active slot (e.g. a Phase 1
+            # `pt transcribe` CLI run against the same DB claimed it between
+            # our guard check and the claim UPDATE).  That is NOT a job
+            # failure: leave the job PENDING and let the loop retry it.
+            log.info("job %s slot busy (another job active); retrying later",
+                     job_id)
         except DownloadError as exc:
             store.update_job(job_id, status=JOB_FAILED, error=str(exc))
             log.info("job %s download failed: %s", job_id, exc)
@@ -193,17 +250,17 @@ def get_worker(db_path, cfg: Config, **kwargs) -> Worker:
         return worker
 
 
-def stop_worker(db_path) -> None:
+def stop_worker(db_path, timeout: float = 3.0) -> None:
     key = str(Path(db_path).resolve())
     with _registry_lock:
         worker = _registry.pop(key, None)
     if worker is not None:
-        worker.stop()
+        worker.stop(timeout=timeout)
 
 
-def stop_all() -> None:
+def stop_all(timeout: float = 3.0) -> None:
     with _registry_lock:
         workers = list(_registry.values())
         _registry.clear()
     for w in workers:
-        w.stop()
+        w.stop(timeout=timeout)

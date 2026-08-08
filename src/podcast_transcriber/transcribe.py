@@ -17,6 +17,7 @@ import contextlib
 import logging
 import math
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -110,8 +111,17 @@ def transcribe_job(
     # Same-job guard: atomically claim THIS job (PENDING -> RUNNING).  Two
     # processes racing on the same job: only one conditional UPDATE matches, the
     # loser gets rowcount 0 and reports already-running instead of duplicating
-    # work.
-    if not store.claim_job(job_id):
+    # work.  A partial-unique-index violation means a *different* job grabbed
+    # the single active slot between the guard check above and this UPDATE;
+    # that is a transient slot race, not a failure -- leave the job PENDING.
+    try:
+        claimed = store.claim_job(job_id)
+    except sqlite3.IntegrityError:
+        raise TranscribeError(
+            "another job is already active; the single active slot is busy "
+            "(will be retried)"
+        ) from None
+    if not claimed:
         raise TranscribeError(
             f"Job {job_id} is not PENDING; it is already being processed "
             "by another run (resume requires a PENDING job)"

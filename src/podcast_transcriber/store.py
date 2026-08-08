@@ -398,11 +398,59 @@ class Store:
             assert job is not None
             return job
 
+    def recover_stale_running(self) -> int:
+        """Sweep stale RUNNING jobs back into the queue (crash recovery).
+
+        A process killed mid-transcription (Ctrl-C, kill -9, power loss) leaves
+        its job RUNNING; that row then blocks every future claim forever.  Call
+        this once at app startup, before the worker starts.
+
+        The partial unique index permits ONE PENDING row alongside the RUNNING
+        row, so a stale RUNNING job is swept to PENDING only when the slot is
+        free; if another job is already PENDING (waiting), the stale job is
+        queued as QUEUED behind it instead -- either way the deadlock is
+        broken and the worker drains everything in order.
+
+        Assumes a single writer per database: no other process is mid-run
+        against this DB while we sweep, so a RUNNING row is by definition
+        stale.  Returns the number of jobs reset.
+        """
+        def _do(conn: sqlite3.Connection) -> int:
+            running = conn.execute(
+                "SELECT id FROM jobs WHERE status=?", (JOB_RUNNING,)
+            ).fetchall()
+            pending_exists = (
+                conn.execute(
+                    "SELECT 1 FROM jobs WHERE status=? LIMIT 1", (JOB_PENDING,)
+                ).fetchone()
+                is not None
+            )
+            count = 0
+            for row in running:
+                target = JOB_PENDING if not pending_exists else JOB_QUEUED
+                conn.execute(
+                    "UPDATE jobs SET status=?, error=NULL, updated_at=? WHERE id=?",
+                    (target, _now(), row["id"]),
+                )
+                pending_exists = True  # slot now occupied by this job
+                count += 1
+            return count
+
+        return self._write(_do)
+
     def next_queued_job(self) -> Optional[Job]:
-        """Oldest job waiting for the single active slot (QUEUED or PENDING)."""
+        """Oldest job waiting for the single active slot (QUEUED or PENDING).
+
+        PENDING jobs are preferred over QUEUED ones so an older QUEUED row that
+        cannot be promoted (a PENDING job already holds the slot) can never
+        starve the PENDING job behind it.
+        """
         row = self._conn.execute(
-            "SELECT * FROM jobs WHERE status IN (?, ?) ORDER BY id LIMIT 1",
-            (JOB_QUEUED, JOB_PENDING),
+            """
+            SELECT * FROM jobs WHERE status IN (?, ?)
+            ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id LIMIT 1
+            """,
+            (JOB_QUEUED, JOB_PENDING, JOB_PENDING),
         ).fetchone()
         return Job.from_row(row) if row else None
 

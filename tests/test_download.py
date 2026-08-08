@@ -92,3 +92,85 @@ def test_download_http_error_raises(store, tmp_path):
         download_episode(store, eid, tmp_path / "audio", client=client)
     # broken download must not update audio_url
     assert store.get_episode(eid).audio_url == "https://cdn/x.mp3"
+
+
+# --------------------------------------------------------------------------- #
+# F4: SSRF guard + download size cap
+# --------------------------------------------------------------------------- #
+def test_download_refuses_loopback_address(store, tmp_path):
+    ep = Episode(url="https://open.spotify.com/episode/ssrf1", title="SSRF",
+                 audio_url="http://127.0.0.1:8080/internal.mp3")
+    eid = store.upsert_episode(ep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(DownloadError, match="non-public"):
+        download_episode(store, eid, tmp_path / "audio", client=client)
+
+
+def test_download_refuses_private_link_local_address(store, tmp_path):
+    ep = Episode(url="https://open.spotify.com/episode/ssrf2", title="SSRF",
+                 audio_url="http://169.254.169.254/latest/meta-data/")
+    eid = store.upsert_episode(ep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"iam-creds")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(DownloadError, match="non-public"):
+        download_episode(store, eid, tmp_path / "audio", client=client)
+
+
+def test_download_refuses_redirect_to_private_address(store, tmp_path):
+    """Redirects are followed manually and the guard is re-applied per hop."""
+    ep = Episode(url="https://open.spotify.com/episode/ssrf3", title="SSRF",
+                 audio_url="https://cdn.example.test/ep.mp3")
+    eid = store.upsert_episode(ep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "cdn.example.test":
+            return httpx.Response(
+                302, headers={"location": "http://10.0.0.5/internal.mp3"}
+            )
+        return httpx.Response(200, content=b"oops")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(DownloadError, match="non-public"):
+        download_episode(store, eid, tmp_path / "audio", client=client)
+
+
+def test_download_oversize_content_length_rejected(store, tmp_path):
+    ep = Episode(url="https://open.spotify.com/episode/big", title="Big",
+                 audio_url="https://cdn.example.test/big.mp3")
+    eid = store.upsert_episode(ep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"small",
+                              headers={"Content-Length": "999999999999"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(DownloadError, match="exceeds"):
+        download_episode(store, eid, tmp_path / "audio", client=client,
+                         max_bytes=1024)
+
+
+def test_download_streaming_cap_rejects_unbounded_body(store, tmp_path):
+    """A lying/absent Content-Length must not bypass the cap: it is enforced
+    while streaming."""
+    ep = Episode(url="https://open.spotify.com/episode/big2", title="Big2",
+                 audio_url="https://cdn.example.test/big2.mp3")
+    eid = store.upsert_episode(ep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Body is 2112 bytes but the server claims only 100: the pre-check
+        # passes and the streaming loop must trip the cap.
+        return httpx.Response(200, content=b"a" * (2048 + 64),
+                              headers={"Content-Type": "audio/mpeg",
+                                       "Content-Length": "100"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(DownloadError, match="exceeded"):
+        download_episode(store, eid, tmp_path / "audio", client=client,
+                         max_bytes=2048)

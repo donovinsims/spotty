@@ -1,9 +1,13 @@
 /* podcast-transcriber — PWA-lite service worker.
- * Caches the app shell (index, css, htmx, icons, manifest) for offline start.
- * Network-first for the index page so the submit form always reflects the
- * latest app; stale-while-revalidate for the rest of the shell.
+ * Caches ONLY the app shell (index, css, htmx, icons, manifest) for offline
+ * start.  Dynamic pages and HTMX fragments (/jobs/*, /search, ...) are NEVER
+ * intercepted or cached: they must always hit the network so progress polling
+ * and job state stay fresh.
+ *
+ * Cache version bump forces previously-installed workers to reinstall and
+ * drop their old (over-broad) caches on activate.
  */
-const CACHE = "pt-shell-v1";
+const CACHE = "pt-shell-v2";
 const SHELL = [
   "/",
   "/static/style.css",
@@ -12,6 +16,21 @@ const SHELL = [
   "/static/icon-512.png",
   "/manifest.webmanifest",
 ];
+
+/* Pure decision function (unit-testable): return the caching strategy for a
+ * same-origin GET pathname, or null when the request must go straight to the
+ * network — never intercepted, never cached.
+ *
+ *   "network-first" -> "/" : fresh copy when online, cached shell when offline
+ *   "cache-first"   -> immutable shell assets
+ *   null            -> everything else (dynamic pages + HTMX fragments)
+ */
+function ptCacheStrategy(pathname) {
+  if (pathname === "/") return "network-first";
+  if (pathname === "/manifest.webmanifest") return "cache-first";
+  if (pathname.startsWith("/static/")) return "cache-first";
+  return null;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -41,8 +60,15 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
 
-  // Index: network-first (fall back to cache when offline).
-  if (url.pathname === "/") {
+  const strategy = ptCacheStrategy(url.pathname);
+  if (strategy === null) {
+    // Dynamic pages + HTMX fragments: network default, never cached.  Without
+    // this guard, a cached /jobs/<id>/status fragment would freeze progress
+    // polling forever.
+    return;
+  }
+
+  if (strategy === "network-first") {
     event.respondWith(
       fetch(request)
         .then((response) => {

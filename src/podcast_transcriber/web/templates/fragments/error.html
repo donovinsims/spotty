@@ -1,0 +1,8 @@
+<div class="card status-card">
+  <span class="badge badge-failed">ERROR {{ status_code }}</span>
+  <p class="err">{{ detail }}</p>
+  {% if status_code == 500 %}
+    <p class="muted">Something went wrong on the server. Try again in a moment.</p>
+  {% endif %}
+  <p><a class="btn" href="/">Back home</a></p>
+</div>

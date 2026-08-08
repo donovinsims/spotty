@@ -17,9 +17,12 @@ All HTTP goes through an injectable :class:`httpx.Client` so tests can use
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import os
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 from typing import Dict, Optional
@@ -55,9 +58,100 @@ _MIME_EXT = {
 
 DEFAULT_CHUNK_BYTES = 1 << 20  # 1 MiB streamed read buffer
 
+#: SSRF/size-limit configuration.
+_MAX_REDIRECTS = 5
+DEFAULT_MAX_DOWNLOAD_BYTES = 1 << 30  # 1 GiB
+MAX_DOWNLOAD_BYTES_ENV = "PT_MAX_DOWNLOAD_BYTES"
+
 
 class DownloadError(RuntimeError):
     pass
+
+
+def _max_download_bytes() -> int:
+    """Read PT_MAX_DOWNLOAD_BYTES (bytes); default 1 GiB."""
+    raw = os.getenv(MAX_DOWNLOAD_BYTES_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_MAX_DOWNLOAD_BYTES
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        log.warning("invalid %s=%r; using default %d",
+                    MAX_DOWNLOAD_BYTES_ENV, raw, DEFAULT_MAX_DOWNLOAD_BYTES)
+        return DEFAULT_MAX_DOWNLOAD_BYTES
+
+
+def _uses_mock_transport(client: httpx.Client) -> bool:
+    """True when the client is wired to httpx.MockTransport.
+
+    Test seam: MockTransport never touches the network, so there is no SSRF
+    risk and the hostname cannot be resolved through real DNS anyway.  IP
+    literals are still checked (the guard never needs DNS for those).
+    """
+    return isinstance(getattr(client, "_transport", None), httpx.MockTransport)
+
+
+def _assert_public_url(url: str, *, resolve: bool = True) -> None:
+    """SSRF guard: refuse to download from non-public hosts.
+
+    Hostnames are resolved via DNS and *every* resolved address must be a
+    global public IP (loopback, private, link-local, unspecified, multicast,
+    reserved, CGNAT, ... are all refused).  When ``resolve`` is False (mock
+    transport), only IP-literal hosts are checked.
+    """
+    try:
+        parsed = httpx.URL(url)
+    except ValueError:
+        raise DownloadError(f"invalid download URL: {url}") from None
+    host = parsed.host
+    if not host:
+        raise DownloadError(f"download URL has no host: {url}")
+
+    # IP literals are checked directly; no DNS needed.
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None:
+        if not _is_public_ip(ip):
+            raise DownloadError(
+                f"refusing to download from non-public address {host}"
+            )
+        return
+
+    if not resolve:
+        return  # mock transport: hostname is fake, never actually connected
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise DownloadError(f"cannot resolve host {host!r}: {exc}") from exc
+    for info in infos:
+        try:
+            addr = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if not _is_public_ip(addr):
+            raise DownloadError(
+                f"refusing to download from non-public address {addr} ({host})"
+            )
+
+
+def _is_public_ip(ip: ipaddress._BaseAddress) -> bool:
+    """True only for global-scope public addresses.
+
+    ``is_global`` alone is not enough (multicast 224/4 reports is_global=True
+    on some Python versions), so check the named ranges explicitly as well.
+    """
+    return not (
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_unspecified
+        or ip.is_multicast
+        or ip.is_reserved
+        or not ip.is_global
+    )
 
 
 def is_local_audio_url(url: str) -> bool:
@@ -130,28 +224,60 @@ def _stream_body(
     *,
     progress: Optional[object],
     timeout: Optional[float],
+    max_bytes: int,
+    resolve_ips: bool = True,
 ) -> Path:
     """Stream body into dest (atomically via .part); returns final path.
+
+    Redirects are followed manually so the SSRF guard is re-applied to every
+    hop (including the final URL) BEFORE any connection is made, and the body
+    is capped at ``max_bytes`` (checked against Content-Length and while
+    streaming, in case the server lies or omits it).
 
     The extension is refined from the response Content-Type once headers arrive,
     so ``<dest>`` may be renamed (e.g. URL says .mp4 but body is audio/mpeg).
     """
-    with http.stream("GET", url, follow_redirects=True, timeout=timeout) as resp:
-        resp.raise_for_status()
-        total = int(resp.headers.get("content-length", "0") or 0)
-        ext = extension_for(url, resp.headers.get("content-type"))
-        dest = dest.with_suffix(ext)
-        tmp = dest.with_name(dest.name + ".part")
-        tmp.parent.mkdir(parents=True, exist_ok=True)
-        written = 0
-        with open(tmp, "wb") as fh:
-            for chunk in resp.iter_bytes(chunk_size=DEFAULT_CHUNK_BYTES):
-                fh.write(chunk)
-                written += len(chunk)
-                if progress is not None:
-                    progress(f"  downloaded {written}/{total} bytes")
-        tmp.replace(dest)
-        return dest
+    current = url
+    for _hop in range(_MAX_REDIRECTS + 1):
+        _assert_public_url(current, resolve=resolve_ips)
+        with http.stream("GET", current, follow_redirects=False, timeout=timeout) as resp:
+            if resp.is_redirect and "location" in resp.headers:
+                target = str(resp.url.join(resp.headers["location"]))
+                try:
+                    scheme = httpx.URL(target).scheme
+                except ValueError:
+                    scheme = ""
+                if scheme not in ("http", "https"):
+                    raise DownloadError(
+                        f"redirect to unsupported scheme '{scheme}': {target}"
+                    )
+                current = target
+                continue
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", "0") or 0)
+            if max_bytes and total > max_bytes:
+                raise DownloadError(
+                    f"download of {current} exceeds {max_bytes} byte limit "
+                    f"(content-length {total})"
+                )
+            ext = extension_for(current, resp.headers.get("content-type"))
+            dest = dest.with_suffix(ext)
+            tmp = dest.with_name(dest.name + ".part")
+            tmp.parent.mkdir(parents=True, exist_ok=True)
+            written = 0
+            with open(tmp, "wb") as fh:
+                for chunk in resp.iter_bytes(chunk_size=DEFAULT_CHUNK_BYTES):
+                    fh.write(chunk)
+                    written += len(chunk)
+                    if max_bytes and written > max_bytes:
+                        raise DownloadError(
+                            f"download exceeded {max_bytes} byte limit"
+                        )
+                    if progress is not None:
+                        progress(f"  downloaded {written}/{total} bytes")
+            tmp.replace(dest)
+            return dest
+    raise DownloadError(f"too many redirects downloading {url}")
 
 
 def download_episode(
@@ -163,8 +289,14 @@ def download_episode(
     progress: Optional[object] = None,
     client: Optional[httpx.Client] = None,
     timeout: Optional[float] = 60.0,
+    max_bytes: Optional[int] = None,
 ) -> Dict[str, object]:
-    """Download an episode's audio + ensure a PENDING job. Returns a summary dict."""
+    """Download an episode's audio + ensure a PENDING job. Returns a summary dict.
+
+    ``max_bytes`` caps the streamed body (default: PT_MAX_DOWNLOAD_BYTES, 1 GiB).
+    SSRF guard: every connection target (including redirect hops) must resolve
+    to public IPs only.
+    """
     audio_dir = Path(audio_dir)
     ep = store.get_episode(episode_id)
     if ep is None:
@@ -177,6 +309,8 @@ def download_episode(
 
     own_client = client is None
     http = client or httpx.Client(follow_redirects=True, timeout=timeout)
+    cap = _max_download_bytes() if max_bytes is None else max_bytes
+    resolve_ips = not _uses_mock_transport(http)
 
     def _note(msg: str) -> None:
         if progress is not None:
@@ -201,7 +335,9 @@ def download_episode(
             dest = audio_dir / f"{episode_id}{extension_for(url)}"
             _note(f"downloading {url}")
             try:
-                dest = _stream_body(http, url, dest, progress=progress, timeout=timeout)
+                dest = _stream_body(http, url, dest, progress=progress,
+                                    timeout=timeout, max_bytes=cap,
+                                    resolve_ips=resolve_ips)
             except httpx.HTTPStatusError as exc:
                 raise DownloadError(
                     f"download failed: HTTP {exc.response.status_code} for {url}"

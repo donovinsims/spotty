@@ -30,6 +30,9 @@ DEFAULT_DURATION_TOLERANCE = 600.0  # seconds
 _CHUNK_MINUTES_ENV = "PT_CHUNK_MINUTES"
 DEFAULT_CHUNK_MINUTES = 10.0
 
+_WORKER_STOP_TIMEOUT_ENV = "PT_WORKER_STOP_TIMEOUT"
+DEFAULT_WORKER_STOP_TIMEOUT = 5.0
+
 
 def load_env() -> None:
     """Load `.env` (if present) into the environment. Idempotent-ish.
@@ -52,6 +55,7 @@ class Config:
         top_results: Optional[int] = None,
         duration_tolerance: Optional[float] = None,
         chunk_minutes: Optional[float] = None,
+        worker_stop_timeout: Optional[float] = None,
     ) -> None:
         self.model = model or os.getenv(MODEL_ENV, DEFAULT_MODEL)
         data_dir = data_dir or os.getenv(DATA_DIR_ENV, DEFAULT_DATA_DIR)
@@ -69,6 +73,11 @@ class Config:
         )
         self.chunk_minutes = float(
             chunk_minutes if chunk_minutes is not None else os.getenv(_CHUNK_MINUTES_ENV, DEFAULT_CHUNK_MINUTES)
+        )
+        self.worker_stop_timeout = float(
+            worker_stop_timeout
+            if worker_stop_timeout is not None
+            else os.getenv(_WORKER_STOP_TIMEOUT_ENV, DEFAULT_WORKER_STOP_TIMEOUT)
         )
 
     def ensure_dirs(self) -> Path:
