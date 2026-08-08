@@ -108,10 +108,13 @@ def test_token_from_request_bearer_header(store, tmp_path):
     assert r.status_code == 200
 
 
-def test_token_from_request_query_param(store, tmp_path):
+def test_token_from_request_query_param_rejected(store, tmp_path):
+    """M2: ?token= must NOT authenticate (it would leak into uvicorn logs)."""
     with TestClient(make_app(store, tmp_path, token=TOKEN)) as client:
-        r = client.get(f"/?token={TOKEN}")
-    assert r.status_code == 200
+        r = client.get(f"/?token={TOKEN}", headers={"accept": "text/html"},
+                       follow_redirects=False)
+    assert r.status_code in (302, 401)
+    assert "pt_token" not in r.headers.get("set-cookie", "")
 
 
 def test_is_public_path():
@@ -119,6 +122,10 @@ def test_is_public_path():
     assert is_public_path("/static/style.css") is True
     assert is_public_path("/login") is True
     assert is_public_path("/logout") is True
+    # L2: PWA shell assets are public (they leak nothing) so the service
+    # worker can install before the user has signed in.
+    assert is_public_path("/sw.js") is True
+    assert is_public_path("/manifest.webmanifest") is True
     assert is_public_path("/") is False
     assert is_public_path("/jobs/1/transcript/download") is False
 
@@ -265,3 +272,61 @@ def test_login_next_redirect_stays_local(store, tmp_path):
         local = client.post("/login?next=/jobs/3", data={"token": TOKEN},
                             follow_redirects=False)
         assert local.headers["location"] == "/jobs/3"
+
+
+def test_login_next_rejects_backslash_open_redirects(store, tmp_path):
+    """M1: backslash-based variants must not redirect off-host.  Browsers
+    normalize '\\' to '/' in http(s) URLs, so '/\\evil.example' would otherwise
+    become '//evil.example' (an external redirect)."""
+    evil_values = [
+        "/\\evil.example",        # urlsplit keeps it in path; explicit reject
+        "\\\\evil.example",       # double backslash -> //evil.example in browsers
+        "//evil.example",         # protocol-relative
+        "https://evil.example",   # absolute
+    ]
+    for next_value in evil_values:
+        with TestClient(make_app(store, tmp_path, token=TOKEN)) as client:
+            r = client.post("/login", params={"next": next_value},
+                            data={"token": TOKEN}, follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"] == "/", \
+            f"next={next_value!r} must redirect to /, got {r.headers['location']}"
+
+
+def test_login_cookie_has_security_flags(store, tmp_path):
+    """L5: the pt_token cookie is HttpOnly, SameSite=lax and expires (30d)."""
+    with TestClient(make_app(store, tmp_path, token=TOKEN)) as client:
+        r = client.post("/login", data={"token": TOKEN},
+                        follow_redirects=False)
+    set_cookie = r.headers["set-cookie"]
+    assert set_cookie.startswith("pt_token=")
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Max-Age=2592000" in set_cookie  # 30 days
+
+
+def test_healthz_503_when_ping_raises(store, tmp_path, monkeypatch):
+    """L5: a failing DB probe answers 503 (never 500)."""
+    import podcast_transcriber.web.app as app_mod
+
+    class BrokenStore:
+        def ping(self):
+            raise RuntimeError("db closed")
+
+    monkeypatch.setattr(app_mod, "_store_for", lambda db_path: BrokenStore())
+    with TestClient(make_app(store, tmp_path)) as client:
+        r = client.get("/healthz")
+    assert r.status_code == 503
+    assert r.json()["status"] == "ok"
+    assert r.json()["db"] == "error"
+
+
+def test_pwa_shell_assets_public_with_auth_on(store, tmp_path):
+    """L2: /sw.js and /manifest.webmanifest are reachable without a token so
+    the service worker can install before sign-in."""
+    with TestClient(make_app(store, tmp_path, token=TOKEN)) as client:
+        assert client.get("/sw.js").status_code == 200
+        assert client.get("/manifest.webmanifest").status_code == 200
+        # ...while the app shell itself still requires auth.
+        assert client.get("/", headers={"accept": "text/html"},
+                          follow_redirects=False).status_code == 302

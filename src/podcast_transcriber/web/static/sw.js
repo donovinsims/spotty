@@ -7,7 +7,7 @@
  * Cache version bump forces previously-installed workers to reinstall and
  * drop their old (over-broad) caches on activate.
  */
-const CACHE = "pt-shell-v2";
+const CACHE = "pt-shell-v3";
 const SHELL = [
   "/",
   "/static/style.css",
@@ -72,8 +72,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy));
+          // Only cache OK responses: with auth enabled, an unauthenticated
+          // fetch of "/" returns 302 -> /login, and that redirect page must
+          // never become the offline shell.
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
           return response;
         })
         .catch(() => caches.match(request))

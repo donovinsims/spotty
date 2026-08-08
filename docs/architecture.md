@@ -27,8 +27,8 @@ src/podcast_transcriber/
 └── web/
     ├── app.py       FastAPI app factory: routes, error handlers, auth
     │                middleware wiring
-    ├── auth.py      Optional single-user auth (PT_AUTH_TOKEN): header /
-    │                query / cookie token checks, constant-time compare
+    ├── auth.py      Optional single-user auth (PT_AUTH_TOKEN): Bearer
+    │                header / cookie token checks, constant-time compare
     ├── worker.py    One background thread per database; drains QUEUED/
     │                PENDING jobs oldest-first
     ├── templates/   Jinja2 (base, index, jobs, job_detail, transcript,
@@ -113,11 +113,14 @@ and a tmp-path store. Lifespan:
 ### Optional auth (Phase 3)
 
 When `PT_AUTH_TOKEN` is set (via `.env`), an HTTP middleware guards every route
-except `/healthz`, `/static/*`, `/login` and `/logout`. Token accepted as:
+except `/healthz`, `/static/*`, `/sw.js`, `/manifest.webmanifest`, `/login` and
+`/logout`. Token accepted as:
 
 - `Authorization: Bearer <token>` header (scripts/API),
-- `?token=<token>` query parameter,
 - `pt_token` cookie (set by the `/login` page, httponly, SameSite=Lax, 30-day).
+
+(Query-string `?token=` is not accepted — it would leak the credential into
+uvicorn access logs.)
 
 Comparison is constant-time (`hmac.compare_digest`). Unauthenticated browser
 GETs redirect to `/login?next=<path>`; HTMX/API requests get 401 JSON (HTMX
@@ -144,10 +147,11 @@ disabled, exact Phase 1/2 behaviour. `/healthz` stays public for
 
 `scripts/tailscale-serve.sh` uses the Tailscale CLI
 (`/Applications/Tailscale.app/Contents/MacOS/Tailscale`) to enable
-`tailscale serve --bg <PT_PORT>` — an HTTPS proxy of `127.0.0.1:<port>`
-reachable only on the tailnet. It checks `serve status --json` first and only
-adds an entry for **our** port; other serve entries (e.g. a `:20128` proxy)
-are never modified. The printed URL is
+`tailscale serve --yes --bg --https=<PT_PORT> http://127.0.0.1:<port>` — an
+HTTPS proxy of `127.0.0.1:<port>` bound to our own https port, reachable only
+on the tailnet. It checks `serve status --json` first and only adds an entry
+for **our** port; other serve entries (e.g. a `:20128` proxy) are never
+modified. The printed URL is
 `https://<machine>.<tailnet>.ts.net:<port>` (e.g.
 `https://donovins-macbook-pro.taila94639.ts.net:8765`). Because `serve`
 exposes the app tailnet-wide, the runbook recommends setting `PT_AUTH_TOKEN`.

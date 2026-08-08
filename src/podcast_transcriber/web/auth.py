@@ -1,12 +1,16 @@
 """Optional single-user auth for the web UI (Phase 3).
 
 When ``PT_AUTH_TOKEN`` is set (via config, i.e. ``cfg.auth_token``), every
-route except /healthz, /static/* and the auth routes themselves (/login,
-/logout) requires a valid token, accepted in three forms:
+route except /healthz, /static/*, /sw.js, /manifest.webmanifest and the auth
+routes themselves (/login, /logout) requires a valid token, accepted in two
+forms:
 
   * ``Authorization: Bearer <token>`` header  (scripts / API calls)
-  * ``?token=<token>`` query parameter        (e.g. download links)
   * ``pt_token`` cookie                       (set by the /login page)
+
+(Query-string ``?token=`` is deliberately NOT accepted: uvicorn access logs
+write the full request target, so a query token would leak the credential to
+logs/serve.out.log.)
 
 Token comparison is constant-time (``hmac.compare_digest``).  An empty /
 unset token disables auth entirely, preserving the Phase 1/2 single-user LAN
@@ -28,7 +32,15 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 #: Paths that never require a token.
-PUBLIC_PATHS = ("/healthz", "/login", "/logout")
+PUBLIC_PATHS = (
+    "/healthz",
+    "/login",
+    "/logout",
+    # PWA shell assets -- they leak nothing, and the service worker must be
+    # installable before the login page can be reached offline.
+    "/sw.js",
+    "/manifest.webmanifest",
+)
 
 
 def token_matches(provided: Optional[str], expected: Optional[str]) -> bool:
@@ -39,14 +51,11 @@ def token_matches(provided: Optional[str], expected: Optional[str]) -> bool:
 
 
 def token_from_request(request: Request) -> Optional[str]:
-    """Extract a token from the request (header, query, or cookie)."""
+    """Extract a token from the request (Bearer header or pt_token cookie)."""
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         token = auth[7:].strip()
         return token or None
-    query_token = request.query_params.get("token")
-    if query_token:
-        return query_token
     cookie = request.cookies.get("pt_token")
     return cookie or None
 
@@ -70,9 +79,9 @@ def unauthorized_response(request: Request) -> JSONResponse | RedirectResponse:
         return response
     is_browser = "text/html" in request.headers.get("accept", "")
     if request.method == "GET" and is_browser:
+        # path only -- never echo the query string into next= (it can carry a
+        # ?token= secret, which would leak into logs and Referer headers).
         next_url = request.url.path
-        if request.url.query:
-            next_url += "?" + request.url.query
         return RedirectResponse(
             url=f"/login?next={quote(next_url, safe='')}", status_code=302
         )

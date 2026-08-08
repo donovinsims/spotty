@@ -37,6 +37,7 @@ Requirements before installing:
 - `ffmpeg`/`ffprobe` on PATH (the plist sets
   `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`, which covers the standard
   Homebrew location).
+- `jq` for `scripts/tailscale-serve.sh` (macOS lacks it — `brew install jq`).
 - Port 8765 free (or change `PT_PORT` in `.env` first).
 
 ## 2. Configuration (`.env`)
@@ -71,7 +72,9 @@ openssl rand -hex 32
 ```bash
 scripts/status.sh     # launchd state + /healthz probe
 scripts/start.sh      # ensure loaded, then start (kickstart)
-scripts/stop.sh       # SIGTERM the service (plist stays loaded; autostart kept)
+scripts/stop.sh       # stop the service (boots the job OUT of launchd; the
+                      # plist FILE is kept, but autostart is suspended until
+                      # start.sh / install.sh re-bootstrap it)
 scripts/restart.sh    # stop + start + status (use after .env edits / upgrades)
 scripts/logs.sh       # tail logs/serve.out.log + logs/serve.err.log (Ctrl-C quits)
 scripts/logs.sh 500   # tail with a specific line count
@@ -109,8 +112,9 @@ This is idempotent:
 
 - If `tailscale serve` already proxies our port (`$PT_PORT`, default 8765), it
   only prints the URL.
-- Otherwise it enables `tailscale serve --bg 8765` — an HTTPS proxy of
-  `127.0.0.1:8765`, reachable **only** from devices on the same tailnet.
+- Otherwise it enables `tailscale serve --yes --bg --https=8765
+  http://127.0.0.1:8765` — an HTTPS proxy of `127.0.0.1:8765` bound to our own
+  https port, reachable **only** from devices on the same tailnet.
 - It never touches other serve entries (e.g. the existing `:20128` proxy on
   this machine); it only checks/adds an entry for our own port.
 

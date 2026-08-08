@@ -20,8 +20,10 @@ scripts/stop.sh
 scripts/status.sh        # confirm "running: no"
 ```
 
-`stop.sh` keeps the plist loaded, so launchd will not auto-start the old code
-while we work.
+`stop.sh` unloads the job from launchd (`bootout`); the plist FILE is kept in
+place, but the service stays stopped (autostart suspended) until
+`scripts/start.sh` or `scripts/install.sh` re-bootstraps it — launchd will not
+auto-start the old code while we work.
 
 ### 2. Identify the previous commit
 
@@ -37,12 +39,34 @@ git stash                 # if you have uncommitted work you want to keep
 git checkout <previous-hash>
 ```
 
-If you need to keep the current code too (e.g. to inspect it), use a branch:
+**Important:** `scripts/` and `deploy/` were introduced in 7416bf3 (Phase 3) —
+they do **not** exist in earlier commits. A full checkout of the commit below
+HEAD removes them, so `scripts/restart.sh` would be gone by step 5. Two safe
+options:
 
-```bash
-git branch deploy-backup   # mark the current state
-git checkout <previous-hash>
-```
+- **Option A — keep the ops scripts (recommended).** Check out the code paths
+  only and keep the current `scripts/`, `deploy/`, `docs/` from HEAD:
+
+  ```bash
+  git checkout <previous-hash> -- src tests pyproject.toml README.md .env.template
+  git checkout HEAD -- scripts deploy docs
+  ```
+
+  (`git checkout <hash> -- <path>` updates only those paths; everything else
+  in the working tree is untouched, so HEAD's ops scripts survive.)
+
+- **Option B — full checkout, restart via launchctl directly.** The generated
+  plist at `~/Library/LaunchAgents/com.podcasttranscriber.serve.plist`
+  survives the checkout (it lives outside the repo), so you can bootstrap the
+  service without `scripts/`:
+
+  ```bash
+  git checkout <previous-hash>
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.podcasttranscriber.serve.plist
+  ```
+
+7416bf3 added **no DB migration** (schema stays at version 1), so the previous
+code runs unchanged against the existing database — no data restore is needed.
 
 ### 4. Reinstall the venv (code changed → console script must match)
 
@@ -53,7 +77,8 @@ git checkout <previous-hash>
 ### 5. Restart and verify
 
 ```bash
-scripts/restart.sh
+scripts/restart.sh       # Option A above; for Option B, start.sh or:
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.podcasttranscriber.serve.plist
 scripts/status.sh
 curl -fsS http://127.0.0.1:8765/healthz
 # {"status":"ok","version":"0.1.0","db":"ok"}
@@ -91,8 +116,9 @@ If the service fails immediately after an upgrade (crash loop), you do not even
 need to stop it manually:
 
 ```bash
-scripts/uninstall.sh            # stop + unload + remove plist
-git checkout <previous-hash>
+scripts/uninstall.sh            # stop + unload + remove plist (run BEFORE the checkout)
+git checkout <previous-hash> -- src tests pyproject.toml README.md .env.template
+git checkout HEAD -- scripts deploy docs   # keep the ops scripts (they post-date the old commit)
 .venv/bin/pip install -e .
 scripts/install.sh              # reinstall the launchd service
 scripts/status.sh

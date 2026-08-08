@@ -436,7 +436,7 @@ def test_pwa_assets(store, tmp_path):
 def test_sw_js_intercepts_shell_only():
     sw = SW_PATH.read_text()
     # cache version bumped so previously-installed workers refresh
-    assert "pt-shell-v2" in sw
+    assert "pt-shell-v3" in sw
     # the decision function exists and returns null for non-shell paths
     assert "function ptCacheStrategy" in sw
     assert "return null;" in sw
@@ -445,6 +445,21 @@ def test_sw_js_intercepts_shell_only():
     # shell assets still listed
     assert "/static/" in sw
     assert "manifest.webmanifest" in sw
+    # L2: the network-first branch only caches OK responses (a 302 -> /login
+    # page must never become the offline shell when auth is on)
+    assert "response.ok" in sw
+
+
+def test_sw_network_first_caches_only_ok_responses():
+    """L2: mirror the sw.js network-first branch -- only res.ok responses are
+    written to the cache; 3xx (auth redirect) and error responses are not."""
+    sw = SW_PATH.read_text()
+    assert "network-first" in sw
+    assert "response.ok" in sw
+    # the status check guards the cache.put
+    ok_idx = sw.index("response.ok")
+    put_idx = sw.index("cache.put(request, copy)")
+    assert ok_idx < put_idx, "cache.put must be guarded by response.ok"
 
 
 def test_sw_caches_shell_but_not_dynamic_status(store, tmp_path):

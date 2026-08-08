@@ -298,7 +298,10 @@ def create_app(
     @app.get("/healthz")
     def healthz():
         """Liveness + DB reachability probe (always public)."""
-        db_ok = store().ping()
+        try:
+            db_ok = bool(store().ping())
+        except Exception:  # noqa: BLE001 - a failing probe answers 503, never 500
+            db_ok = False
         payload = {
             "status": "ok",
             "version": __version__,
@@ -320,8 +323,14 @@ def create_app(
             return render("login.html", request,
                           {"error": "Invalid token — try again."}, status_code=401)
         # Only allow local relative redirects (no open-redirect via next=).
+        # urlsplit-based: scheme must be empty (no https://...) and netloc must
+        # be empty (no //evil.example).  Backslashes are rejected explicitly
+        # because urlsplit leaves them in path (urlsplit("/\evil.example") ->
+        # netloc "") yet browsers normalize "\" to "/" in http(s) URLs, turning
+        # "/\evil.example" into "//evil.example" (an external redirect).
         next_url = request.query_params.get("next", "/")
-        if not next_url.startswith("/") or next_url.startswith("//"):
+        parts = urlsplit(next_url)
+        if parts.scheme or parts.netloc or "\\" in next_url:
             next_url = "/"
         response = RedirectResponse(next_url, status_code=302)
         response.set_cookie(

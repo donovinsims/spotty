@@ -17,7 +17,7 @@ external CDNs; everything runs on this machine.
 **Phase 3: deployment & operations.** `scripts/install.sh` installs a launchd
 auto-start service (`com.podcasttranscriber.serve`) with KeepAlive, a
 repo-root `.env.template`, `GET /healthz` liveness + DB probe, optional
-single-user auth (`PT_AUTH_TOKEN`, Bearer header / `?token=` / login cookie),
+single-user auth (`PT_AUTH_TOKEN`, Bearer header / login cookie),
 and `scripts/tailscale-serve.sh` for iPhone access over Tailscale. See
 [`docs/deployment-runbook.md`](docs/deployment-runbook.md),
 [`docs/rollback.md`](docs/rollback.md) and
@@ -137,11 +137,13 @@ How it works:
 ### Optional auth (`PT_AUTH_TOKEN`)
 
 When `PT_AUTH_TOKEN` is set in `.env`, every route except `/healthz`,
-`/static/*`, `/login` and `/logout` requires the token, accepted as
-`Authorization: Bearer <token>`, `?token=<token>`, or the `pt_token` cookie
-set by the `/login` page (unauthenticated browser GETs redirect to `/login`,
-API calls get 401 JSON; comparison is constant-time). Empty/unset ⇒ no auth
-(current single-user behaviour). Generate one with `openssl rand -hex 32`.
+`/static/*`, `/sw.js`, `/manifest.webmanifest`, `/login` and `/logout` requires
+the token, accepted as `Authorization: Bearer <token>` or the `pt_token`
+cookie set by the `/login` page (unauthenticated browser GETs redirect to
+`/login`, API calls get 401 JSON; comparison is constant-time). Query-string
+`?token=` is **not** accepted — it would leak the credential into uvicorn
+access logs. Empty/unset ⇒ no auth (current single-user behaviour). Generate
+one with `openssl rand -hex 32`.
 
 ## Operations (Phase 3)
 
@@ -149,7 +151,8 @@ API calls get 401 JSON; comparison is constant-time). Empty/unset ⇒ no auth
 scripts/install.sh      # create .env if missing, install launchd autostart, start
 scripts/status.sh       # launchd state + GET /healthz probe
 scripts/start.sh        # start the service
-scripts/stop.sh         # stop the service (autostart kept)
+scripts/stop.sh         # stop the service (unloads the job from launchd;
+                        # plist FILE kept, autostart suspended until start/install)
 scripts/restart.sh      # stop + start (after .env edits or upgrades)
 scripts/logs.sh         # tail logs/
 scripts/uninstall.sh    # stop + unload + remove the plist
@@ -163,8 +166,10 @@ scripts/tailscale-serve.sh   # idempotent iPhone access over Tailscale (HTTPS)
 - `GET /healthz` (always public) returns
   `{"status":"ok","version":"0.1.0","db":"ok"}` and is used by
   `scripts/status.sh`.
-- `scripts/tailscale-serve.sh` enables `tailscale serve --bg 8765` (HTTPS
-  proxy of `127.0.0.1:8765`, tailnet-only) and prints the iPhone URL, e.g.
+- `scripts/tailscale-serve.sh` enables
+  `tailscale serve --yes --bg --https=8765 http://127.0.0.1:8765` (HTTPS
+  proxy of `127.0.0.1:8765` bound to our own https port, tailnet-only) and
+  prints the iPhone URL, e.g.
   `https://donovins-macbook-pro.taila94639.ts.net:8765`. It never touches
   other serve entries (e.g. the existing `:20128` proxy).
 - Full runbook: [`docs/deployment-runbook.md`](docs/deployment-runbook.md);
@@ -193,7 +198,7 @@ Schema migrations are applied on open (`schema_version` table).
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # full suite (96 tests: Phase 1/2 + auth)
+.venv/bin/python -m pytest -q     # full suite (101 tests: Phase 1/2 + auth + security)
 .venv/bin/python -m compileall -q src
 ```
 
