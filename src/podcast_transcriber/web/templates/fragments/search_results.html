@@ -1,15 +1,16 @@
 {% if q %}
 <div class="search-summary">
   {% if matches %}
-    <p>{{ matches|length }} matching segment(s) for “{{ q }}”</p>
+    <p class="muted">{{ matches|length }} matching {{ matches|length|pluralize('segment') }} for “{{ q }}”
+       · <a href="/jobs/{{ job_id }}/transcript">clear</a></p>
   {% else %}
     <p class="muted">No matches for “{{ q }}”.</p>
   {% endif %}
 </div>
 {% endif %}
 {% for m in matches %}
-<div class="seg">
-  <span class="ts">{{ m.start_time|ts }}</span>
+<div class="seg" id="seg-{{ m.idx }}">
+  <span class="ts"><a class="ts" href="#seg-{{ m.idx }}">{{ m.start_time|ts }}</a></span>
   <span class="seg-text">{{ m.highlighted|safe }}</span>
 </div>
 {% endfor %}

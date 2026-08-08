@@ -3,5 +3,6 @@
 {% block content %}
 <h1>{{ status_code }}</h1>
 <p class="muted">{{ detail }}</p>
+{% if status_code == 500 %}<p class="muted">Something went wrong on the server. Try again in a moment.</p>{% endif %}
 <p><a class="btn" href="/">Back home</a></p>
 {% endblock %}

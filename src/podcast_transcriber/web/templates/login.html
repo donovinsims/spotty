@@ -6,10 +6,11 @@
   <p class="muted">This instance is protected. Enter the access token from
     <code>PT_AUTH_TOKEN</code> (repo <code>.env</code>).</p>
   {% if error %}
-  <p class="error">{{ error }}</p>
+  <p class="err" role="alert">{{ error }}</p>
   {% endif %}
-  <form class="column" method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') | urlencode }}{% endif %}">
-    <input type="password" name="token" placeholder="access token"
+  <form class="stack" method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') | urlencode }}{% endif %}">
+    <label for="token">Access token</label>
+    <input id="token" type="password" name="token" placeholder="access token"
            autocomplete="current-password" autofocus required>
     <button type="submit" class="btn">Sign in</button>
   </form>

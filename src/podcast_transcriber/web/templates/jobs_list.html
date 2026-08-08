@@ -3,28 +3,29 @@
 {% block content %}
 <h1>Jobs</h1>
 {% if rows %}
-<div class="card table-card">
-  <table>
+<div class="card table-card" {% if active %}hx-get="/jobs" hx-trigger="every 10s" hx-select=".table-card" hx-swap="outerHTML"{% endif %}>
+  <table aria-label="Transcription jobs">
     <thead>
       <tr>
-        <th>ID</th>
-        <th>Status</th>
-        <th>Episode</th>
-        <th>Created</th>
+        <th scope="col">ID</th>
+        <th scope="col">Status</th>
+        <th scope="col">Episode</th>
+        <th scope="col">Created</th>
       </tr>
     </thead>
     <tbody>
       {% for job, episode in rows %}
       <tr>
-        <td><a href="/jobs/{{ job.id }}">#{{ job.id }}</a></td>
-        <td><span class="badge badge-{{ job.status|lower }}">{{ job.status }}</span></td>
-        <td>{{ episode.title if episode else "—" }}</td>
+        <td class="muted">#{{ job.id }}</td>
+        <td><span class="badge badge-{{ job.status|lower }}">{{ job.status|label }}</span></td>
+        <td><a href="/jobs/{{ job.id }}">{{ episode.title if episode else "—" }}</a></td>
         <td class="muted">{{ job.created_at|dt }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% if rows|length == 100 %}<p class="muted">Showing the 100 most recent jobs.</p>{% endif %}
 {% else %}
 <p class="muted">No jobs yet — paste a Spotify episode URL on the <a href="/">home page</a>.</p>
 {% endif %}

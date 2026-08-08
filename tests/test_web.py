@@ -170,7 +170,7 @@ def test_jobs_list_ordered_newest_first(store, tmp_path):
         store.update_job(job.id, status=JOB_COMPLETE)  # free the single slot
     with TestClient(make_app(store, tmp_path)) as client:
         r = client.get("/jobs")
-    ids = [int(m) for m in re.findall(r"/jobs/(\d+)\">#", r.text)]
+    ids = [int(m) for m in re.findall(r"/jobs/(\d+)\"", r.text)]
     assert ids == [2, 1], ids
 
 
@@ -185,8 +185,8 @@ def test_job_detail_page_renders(store, tmp_path):
     assert r.status_code == 200
     assert EP1 in r.text
     assert "Test Show" in r.text
-    assert "VERIFIED" in r.text
-    assert "0.970" in r.text
+    assert "Verified" in r.text
+    assert "97%" in r.text
     assert f'hx-get="/jobs/{job.id}/status"' in r.text  # polling wired up
 
 
@@ -224,7 +224,7 @@ def test_post_jobs_happy_path_runs_worker(store, tmp_path):
 
         # job detail page reflects completion + stops polling
         detail = client.get(f"/jobs/{job_id}")
-        assert "COMPLETE" in detail.text
+        assert "Complete" in detail.text
         assert "View transcript" in detail.text
         assert f'hx-get="/jobs/{job_id}/status"' not in detail.text
 
@@ -326,10 +326,10 @@ def test_status_fragment_shows_progress(store, tmp_path):
         r = client.get(f"/jobs/{job.id}/status")
         release.set()
     assert r.status_code == 200
-    assert "RUNNING" in r.text
-    assert "2 / 4" in r.text
+    assert "Transcribing" in r.text
+    assert "50% done (2 of 4 parts)" in r.text
     assert 'style="width: 50%"' in r.text
-    assert 'hx-trigger="every 2s"' in r.text  # keeps polling
+    assert 'hx-trigger="every 5s' in r.text  # keeps polling
 
 
 def test_status_fragment_terminal_stops_polling(store, tmp_path):
@@ -339,9 +339,9 @@ def test_status_fragment_terminal_stops_polling(store, tmp_path):
     with TestClient(make_app(store, tmp_path)) as client:
         r = client.get(f"/jobs/{job.id}/status")
     assert r.status_code == 200
-    assert "FAILED" in r.text
+    assert "Failed" in r.text
     assert "boom" in r.text
-    assert 'hx-trigger="every 2s"' not in r.text  # polling stopped
+    assert 'hx-trigger="every 5s' not in r.text  # polling stopped
 
 
 # --------------------------------------------------------------------------- #
@@ -409,7 +409,7 @@ def test_global_search_finds_episodes(store, tmp_path):
         assert r.status_code == 200
         assert EP1 in r.text
         assert "Unrelated Title" not in r.text
-        assert "1 episode(s) matching" in r.text
+        assert "1 episode matching" in r.text
         r2 = client.get("/search", params={"q": "nothing-here"})
         assert "No episodes match" in r2.text
 
@@ -515,15 +515,15 @@ def test_sw_caches_shell_but_not_dynamic_status(store, tmp_path):
         status_url = f"/jobs/{job.id}/status"
         assert strategy(status_url) is None  # excluded by the SW
         r = client.get(status_url)
-        assert "RUNNING" in r.text
+        assert "Transcribing" in r.text
         assert status_url not in cache  # never cached
 
         # State changes between polls -> next poll returns the NEW content.
         release.set()
         wait_for(store, job.id, JOB_COMPLETE)
         r2 = client.get(status_url)
-        assert "COMPLETE" in r2.text
-        assert "RUNNING" not in r2.text
+        assert "Complete" in r2.text
+        assert "Transcribing" not in r2.text
         assert status_url not in cache
 
 
@@ -690,7 +690,7 @@ def test_worker_marks_failed_when_transcribe_raises(store, tmp_path):
         job = store.get_job(job.id)
         assert "boom in transcribe" in job.error
         r = client.get(f"/jobs/{job.id}/status")
-        assert "FAILED" in r.text
+        assert "Failed" in r.text
         assert "boom in transcribe" in r.text
 
 

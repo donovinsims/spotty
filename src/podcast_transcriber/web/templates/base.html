@@ -17,27 +17,39 @@
         navigator.serviceWorker.register("/sw.js").catch(function () {});
       });
     }
+    // H9: pause background-tab polling, resume when visible again.
+    document.addEventListener("visibilitychange", function () {
+      var el = document.getElementById("job-status");
+      if (!el) return;
+      el.dispatchEvent(new Event(
+        document.hidden ? "htmx:pausePolling" : "htmx:resumePolling"));
+    });
   </script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="/">podcast-transcriber</a>
+    {% if request and not request.url.path.startswith("/login") %}
     <nav class="topnav">
       <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>New</a>
       <a href="/jobs" {% if request.url.path.startswith("/jobs") %}aria-current="page"{% endif %}>Jobs</a>
     </nav>
+    {% endif %}
+    {% if auth_enabled %}
+    <form method="post" action="/logout">
+      <button class="btn btn-ghost btn-small">Sign out</button>
+    </form>
+    {% endif %}
   </header>
-  <main class="container">
+  <main id="main" class="container">
     {% block content %}{% endblock %}
   </main>
   <footer class="footer">
-    <span class="muted">local · private · runs entirely on this machine
-      {% if auth_enabled %}<span class="muted">· token auth on</span>{% endif %}
-    </span>
-    {% if auth_enabled %}
-    <form class="logout-form" method="post" action="/logout">
-      <button type="submit" class="btn btn-ghost btn-small">Sign out</button>
-    </form>
+    {% if not auth_enabled and request and not request.url.path.startswith("/login") %}
+    <span class="muted">local · private · runs entirely on this machine</span>
+    {% elif auth_enabled and request and not request.url.path.startswith("/login") %}
+    <span class="muted">runs entirely on this machine</span>
     {% endif %}
   </footer>
 </body>

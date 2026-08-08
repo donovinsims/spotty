@@ -32,6 +32,9 @@ JOB_FAILED = "FAILED"
 #: already taken.  QUEUED rows are invisible to the partial unique index, so any
 #: number of them may wait; the web worker promotes them to PENDING when free.
 JOB_QUEUED = "QUEUED"
+#: User-cancelled from the web UI (H8): terminal, invisible to the
+#: single-active-slot index, never picked up by the worker.
+JOB_CANCELLED = "CANCELLED"
 ACTIVE_STATUSES = (JOB_PENDING, JOB_RUNNING)
 
 # Episode verification states.

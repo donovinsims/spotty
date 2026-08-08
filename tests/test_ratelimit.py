@@ -135,9 +135,9 @@ def test_rate_limit_htmx_gets_fragment(store, tmp_path):
     with TestClient(app) as client:
         client.post("/jobs", data={"url": URL1})
         r = client.post("/jobs", data={"url": URL1}, headers={"HX-Request": "true"})
-        assert r.status_code == 429
+        assert r.status_code == 200  # H7: preserves URL in form fragment
         assert "<html" not in r.text  # fragment, not a full page
-        assert "ERROR 429" in r.text
+        assert "Too many jobs" in r.text
 
 
 def test_rate_limit_api_gets_json(store, tmp_path):

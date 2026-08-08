@@ -1,17 +1,26 @@
-{% if q %}<p class="muted">{{ episodes|length }} episode(s) matching “{{ q }}”.</p>{% endif %}
-{% if episodes %}
+{% if not q or q|trim == '' %}
+<p class="muted">Search stored episodes by title, show, or URL.</p>
+{% elif episodes %}
+<p class="muted">{{ episodes|length }} {{ episodes|length|pluralize('episode') }} matching “{{ q }}”.</p>
 <ul class="episode-list">
   {% for ep in episodes %}
   <li>
-    <div><strong>{{ ep.title or "Untitled episode" }}</strong></div>
+    <div>
+      {% if ep_jobs.get(ep.id) %}
+      <a href="/jobs/{{ ep_jobs[ep.id] }}"><strong>{{ ep.title or "Untitled episode" }}</strong></a>
+      {% else %}
+      <strong>{{ ep.title or "Untitled episode" }}</strong>
+      <a class="btn btn-ghost btn-small" href="/?url={{ (ep.url or '')|urlencode }}">Transcribe this</a>
+      {% endif %}
+    </div>
     <div class="muted">{{ ep.show_name or "Unknown show" }}</div>
     <div class="row small">
-      <span class="badge badge-{{ ep.state|lower }}">{{ ep.state }}</span>
+      <span class="badge badge-{{ ep.state|lower }}">{{ ep.state|label }}</span>
       {% if ep_jobs.get(ep.id) %}<a href="/jobs/{{ ep_jobs[ep.id] }}">view job #{{ ep_jobs[ep.id] }}</a>{% endif %}
     </div>
   </li>
   {% endfor %}
 </ul>
-{% elif q %}
+{% else %}
 <p class="muted">No episodes match “{{ q }}”.</p>
 {% endif %}

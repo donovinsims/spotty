@@ -1,27 +1,47 @@
 <div id="job-status" class="card status-card"
-     {% if view.active %}hx-get="/jobs/{{ job.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+     {% if view.active %}hx-get="/jobs/{{ job.id }}/status" hx-trigger="every 5s [document.visibilityState !== 'hidden']" hx-swap="outerHTML"{% endif %}>
   <div class="status-row">
-    <span class="badge badge-{{ job.status|lower }}">{{ job.status }}</span>
+    <span class="badge badge-{{ job.status|lower }}">{{ job.status|label }}</span>
     {% if view.last_progress %}<span class="muted progress-line">{{ view.last_progress }}</span>{% endif %}
   </div>
 
   {% if job.status == "RUNNING" %}
-    <div class="progress" role="progressbar" aria-valuenow="{{ view.chunks_done }}"
+    {% if view.chunks_total > 0 %}
+    <div class="progress" role="progressbar" aria-label="Transcription progress"
+         aria-valuenow="{{ view.chunks_done }}"
          aria-valuemin="0" aria-valuemax="{{ view.chunks_total }}">
       <div class="progress-fill" style="width: {{ view.progress_pct }}%"></div>
     </div>
-    <p class="muted">{{ view.chunks_done }} / {{ view.chunks_total }} chunks done</p>
+    <p class="muted">{{ view.progress_pct }}% done ({{ view.chunks_done }} of {{ view.chunks_total }} parts)</p>
+    {% else %}
+    <p class="muted">Downloading audio — progress appears once chunking starts…</p>
+    {% endif %}
   {% elif job.status == "QUEUED" %}
-    <p class="muted">Waiting — another job is running. This one will start automatically when it finishes.</p>
+    <p class="muted">Queued behind the current job — yours will start automatically.</p>
+    <form class="actions" hx-post="/jobs/{{ job.id }}/cancel" hx-target="#job-status" hx-swap="outerHTML">
+      <button type="submit" class="btn btn-ghost btn-small">Cancel job</button>
+    </form>
   {% elif job.status == "PENDING" %}
-    <p class="muted">Waiting for the worker to pick this up…</p>
+    <p class="muted">Waiting to start…</p>
+    <form class="actions" hx-post="/jobs/{{ job.id }}/cancel" hx-target="#job-status" hx-swap="outerHTML">
+      <button type="submit" class="btn btn-ghost btn-small">Cancel job</button>
+    </form>
   {% elif job.status == "COMPLETE" %}
-    <p class="ok">Transcription complete — {{ view.segments_count }} segment(s).</p>
+    <p class="ok" role="status">Transcription complete — {{ view.segments_count }} {{ view.segments_count|pluralize('segment') }}.</p>
     <div class="actions">
       <a class="btn" href="/jobs/{{ job.id }}/transcript">View transcript</a>
       <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download">Download .txt</a>
     </div>
   {% elif job.status == "FAILED" %}
-    <p class="err">{{ job.error or "Job failed with no recorded error." }}</p>
+    <p class="err" role="alert">{{ job.error or "Job failed with no recorded error." }}</p>
+    <div class="actions">
+      <a class="btn" href="/">New transcription</a>
+      <button class="btn btn-ghost" hx-post="/jobs/{{ job.id }}/retry" hx-swap="none">Try again</button>
+    </div>
+  {% elif job.status == "CANCELLED" %}
+    <p class="muted">This job was cancelled.</p>
+    <div class="actions">
+      <a class="btn" href="/">New transcription</a>
+    </div>
   {% endif %}
 </div>

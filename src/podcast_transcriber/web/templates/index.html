@@ -2,7 +2,7 @@
 {% block title %}New transcription{% endblock %}
 {% block content %}
 {% if no_auth_warning %}
-<div class="alert alert-warn" role="status">
+<div class="alert alert-warn" role="alert">
   <strong>No auth — anyone who can reach this address can transcribe</strong>
   <p>This instance is serving without a token on a non-loopback interface.
     Set <code>PT_AUTH_TOKEN</code> in <code>.env</code> for tailnet access
@@ -15,10 +15,13 @@
   <form class="row"
         hx-get="/search"
         hx-target="#episode-results"
-        hx-swap="innerHTML">
+        hx-swap="innerHTML"
+        hx-disabled-elt="button[type=submit]">
     <input type="search" name="q" placeholder="title, show or URL…" aria-label="Search stored episodes">
     <button type="submit" class="btn btn-ghost">Search</button>
   </form>
-  <div id="episode-results"></div>
+  <div id="episode-results" aria-live="polite">
+    <p class="muted">Type a title, show, or URL above to search stored episodes.</p>
+  </div>
 </section>
 {% endblock %}

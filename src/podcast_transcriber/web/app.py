@@ -31,6 +31,7 @@ from ..config import Config, get_config, is_loopback_host
 from ..download import download_episode
 from ..resolve import resolve as do_resolve
 from ..store import (
+    JOB_CANCELLED,
     JOB_COMPLETE,
     JOB_FAILED,
     JOB_PENDING,
@@ -113,7 +114,7 @@ def _highlight_matches(segments: List[Dict[str, Any]], query: str) -> List[Dict[
     lowered = query.lower()
     pattern = re.compile(re.escape(query), re.IGNORECASE)
     out = []
-    for seg in segments:
+    for i, seg in enumerate(segments):
         text = seg.get("text") or ""
         if lowered not in text.lower():
             continue
@@ -125,6 +126,7 @@ def _highlight_matches(segments: List[Dict[str, Any]], query: str) -> List[Dict[
         )
         out.append(
             {
+                "idx": i,  # H14: index in the FULL segment list (jump target)
                 "start_time": seg.get("start_time"),
                 "end_time": seg.get("end_time"),
                 "text": text,
@@ -226,6 +228,21 @@ def create_app(
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.filters["ts"] = fmt_ts
     templates.env.filters["dt"] = fmt_dt
+
+    # H4: human-friendly status labels (internal enums stay in the DB).
+    _STATUS_LABELS = {
+        "PENDING": "Waiting", "QUEUED": "Queued", "RUNNING": "Transcribing",
+        "COMPLETE": "Complete", "FAILED": "Failed", "CANCELLED": "Cancelled",
+        "VERIFIED": "Verified", "REVIEW_REQUIRED": "Needs review",
+        "UNAVAILABLE": "Unavailable",
+    }
+    templates.env.filters["label"] = lambda s: _STATUS_LABELS.get(s, s)
+
+    # M2: singular/plural helper, e.g. {{ n|pluralize('segment') }}.
+    templates.env.filters["pluralize"] = (
+        lambda n, singular, plural="": f"{singular}"
+        if n == 1 else (plural or singular + "s")
+    )
     templates.env.globals["auth_enabled"] = bool(cfg.auth_token)
     templates.env.globals["no_auth_warning"] = bool(
         not cfg.auth_token and not is_loopback_host(cfg.host)
@@ -391,8 +408,9 @@ def create_app(
         return response
 
     @app.get("/")
-    def index(request: Request):
-        return render("index.html", request)
+    def index(request: Request, url: str = ""):
+        # H14: /?url=... prefills the submit form ("Transcribe this" links).
+        return render("index.html", request, {"submitted_url": url.strip()})
 
     @app.post("/jobs")
     def create_job(request: Request, url: str = Form(...)):
@@ -404,6 +422,20 @@ def create_app(
         # resolver forever).
         allowed, retry_after = limiter.allow(client_ip(request))
         if not allowed:
+            # H7: keep the user's URL in the form and show an inline alert for
+            # htmx requests (the generic error fragment would destroy their
+            # input); full-page browsers still get the plain error page.
+            if request.headers.get("HX-Request"):
+                response = submit_area(request, submitted_url=url, result={
+                    "kind": "error",
+                    "headline": "Too many jobs — try again in a moment",
+                    "message": (
+                        f"Jobs are limited per minute — wait about "
+                        f"{retry_after}s and try again."
+                    ),
+                })
+                response.headers["Retry-After"] = str(retry_after)
+                return response
             return too_many(
                 request, 429,
                 "You are submitting jobs faster than allowed. Wait a moment "
@@ -414,6 +446,16 @@ def create_app(
         # Phase 4: queue cap -- refuse new jobs once PENDING+QUEUED is full.
         queued = store().count_queued_jobs()
         if queued >= cfg.max_queued:
+            if request.headers.get("HX-Request"):
+                return submit_area(request, submitted_url=url, result={
+                    "kind": "error",
+                    "headline": "Too many jobs — try again in a moment",
+                    "message": (
+                        f"{queued} job(s) already queued (limit {cfg.max_queued}). "
+                        "Wait for the current transcription to finish, then "
+                        "try again."
+                    ),
+                })
             return too_many(
                 request, 409,
                 f"{queued} job(s) already queued (limit {cfg.max_queued}). "
@@ -489,7 +531,9 @@ def create_app(
         s = store()
         jobs = s.list_jobs_by_created(limit=100)
         rows = [(j, s.get_episode(j.episode_id)) for j in jobs]  # type: ignore[arg-type]
-        return render("jobs_list.html", request, {"rows": rows})
+        # M16: keep polling while any listed job is still in flight.
+        active = any(j.status in _POLLING_STATUSES for j, _ in rows)
+        return render("jobs_list.html", request, {"rows": rows, "active": active})
 
     @app.get("/jobs/{job_id}")
     def job_detail(request: Request, job_id: int):
@@ -510,6 +554,32 @@ def create_app(
             "view": status_view(job),
         })
 
+    @app.post("/jobs/{job_id}/cancel")
+    def job_cancel(request: Request, job_id: int):
+        """H8: cancel a waiting job (QUEUED/PENDING) so the slot frees up."""
+        job = job_or_404(job_id)
+        if job.status in (JOB_PENDING, JOB_QUEUED):
+            store().update_job(job_id, status=JOB_CANCELLED)
+        job = job_or_404(job_id)
+        return render("fragments/status.html", request, {
+            "job": job,
+            "view": status_view(job),
+        })
+
+    @app.post("/jobs/{job_id}/retry")
+    def job_retry(request: Request, job_id: int):
+        """H8: re-queue the same episode as a fresh job (for FAILED jobs)."""
+        job = job_or_404(job_id)
+        if job.episode_id is None:
+            raise HTTPException(status_code=400, detail="Job has no episode to retry")
+        new_job = store().create_job_queued(
+            job.episode_id, model=job.model, chunk_minutes=job.chunk_minutes
+        )
+        app.state.worker.start()
+        response = job_detail(request, new_job.id)  # type: ignore[misc]
+        response.headers["HX-Redirect"] = f"/jobs/{new_job.id}"
+        return response
+
     @app.get("/jobs/{job_id}/transcript")
     def transcript(request: Request, job_id: int):
         job = job_or_404(job_id)
@@ -524,15 +594,24 @@ def create_app(
             "tx": tx,
         })
 
-    @app.post("/jobs/{job_id}/transcript/search")
-    def transcript_search(request: Request, job_id: int, q: str = Form("")):
+    def transcript_search_response(request: Request, job_id: int, q: str):
         job_or_404(job_id)
         segments = store().segments_for_job(job_id)  # type: ignore[arg-type]
         matches = _highlight_matches(segments, q)
         return render("fragments/search_results.html", request, {
+            "job_id": job_id,
             "q": q.strip(),
             "matches": matches,
         })
+
+    @app.get("/jobs/{job_id}/transcript/search")
+    def transcript_search_get(request: Request, job_id: int, q: str = ""):
+        # M10: GET so transcript searches are shareable/bookmarkable.
+        return transcript_search_response(request, job_id, q)
+
+    @app.post("/jobs/{job_id}/transcript/search")
+    def transcript_search_post(request: Request, job_id: int, q: str = Form("")):
+        return transcript_search_response(request, job_id, q)
 
     @app.get("/jobs/{job_id}/transcript/download")
     def transcript_download(job_id: int):

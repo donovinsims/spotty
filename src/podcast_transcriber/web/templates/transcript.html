@@ -14,19 +14,20 @@
 </div>
 
 <form class="search-inline"
-      hx-post="/jobs/{{ job.id }}/transcript/search"
+      hx-get="/jobs/{{ job.id }}/transcript/search"
       hx-target="#search-results"
-      hx-swap="innerHTML">
+      hx-swap="innerHTML"
+      hx-disabled-elt="button[type=submit]">
   <input type="search" name="q" placeholder="Search this transcript…" aria-label="Search this transcript">
   <button type="submit" class="btn btn-ghost">Search</button>
 </form>
 
-<div id="search-results"></div>
+<div id="search-results" aria-live="polite"></div>
 
 {% if segments %}
 <div class="transcript">
   {% for seg in segments %}
-  <div class="seg">
+  <div class="seg" id="seg-{{ loop.index0 }}">
     <span class="ts">{{ seg.start_time|ts }}</span>
     <span class="seg-text">{{ seg.text }}</span>
   </div>
