@@ -9,6 +9,10 @@
   <link rel="icon" href="/static/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="/static/style.css">
+  <!-- Process swapped-in fragments immediately.  With the default 20ms
+       settle delay, a tap on a freshly swapped form can outrun htmx's
+       submit listener and fall through to a native GET (?url= reload). -->
+  <meta name="htmx-config" content='{"defaultSettleDelay": 0}'>
   <script src="/static/htmx.min.js" defer></script>
   <script>
     // PWA-lite: cache the app shell for offline start.

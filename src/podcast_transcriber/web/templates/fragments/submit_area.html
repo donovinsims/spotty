@@ -2,7 +2,11 @@
   <h1>Transcribe a Spotify episode</h1>
   <p class="muted">Paste an episode URL and we resolve it, download the audio,
     and transcribe it locally with MLX Whisper — nothing leaves this machine.</p>
+  <!-- method/action = native fallback for any submit htmx misses: a plain
+       POST to /jobs creates the job (or shows the error on the full page)
+       instead of a confusing native GET reload with ?url=. -->
   <form class="stack"
+        method="post" action="/jobs"
         hx-post="/jobs"
         hx-target="#submit-area"
         hx-swap="outerHTML"

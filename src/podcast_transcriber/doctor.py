@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
+import socket
 import subprocess
 import sys
 from contextlib import closing
@@ -63,6 +65,12 @@ def _which(name: str) -> Optional[str]:
         if candidate.is_file():
             return str(candidate)
     return None
+
+
+def _ver_prefix(text: str) -> str:
+    """'1.102.2-t6cac91817' -> '1.102.2' (empty when no version is present)."""
+    match = re.match(r"(\d+\.\d+\.\d+)", text.strip())
+    return match.group(1) if match else ""
 
 
 def _run(cmd: List[str], timeout: float = 10.0) -> subprocess.CompletedProcess:
@@ -165,7 +173,14 @@ def check_worker_state(cfg: Config) -> CheckResult:
 
 
 def check_tailscale(cfg: Config, ts_bin: Optional[str] = None) -> CheckResult:
-    """Tailscale up? Our serve entry for cfg.port present? (CLI missing -> WARN)."""
+    """Tailscale: up, single-version install, tunnel + MagicDNS functional,
+    and our serve entry for cfg.port present.  WARN-only (never FAIL) so a
+    broken tailnet cannot take the local app down.
+
+    `tailscale status` can say "up" while the tunnel is half-broken (stale
+    network extension / mixed installs): MagicDNS stops resolving and the
+    data plane dies.  The extra probes below catch exactly that state.
+    """
     ts_bin = ts_bin or os.getenv("TS_BIN") or TAILSCALE_BIN
     if not Path(ts_bin).is_file():
         return WARN, f"tailscale CLI not found at {ts_bin} (set TS_BIN to override)"
@@ -175,6 +190,46 @@ def check_tailscale(cfg: Config, ts_bin: Optional[str] = None) -> CheckResult:
         return WARN, f"tailscale status failed: {exc}"
     if status.returncode != 0:
         return WARN, "tailscale is not up (tailnet access unavailable; app still works locally)"
+
+    problems: List[str] = []
+
+    # Client vs daemon version mismatch: a mixed install (e.g. Homebrew CLI +
+    # App Store app) is a known cause of a half-broken tunnel.  Compare only
+    # the leading x.y.z -- the daemon prints its commit suffix.
+    try:
+        client = _run([ts_bin, "version"]).stdout or ""
+        data = json.loads((_run([ts_bin, "status", "--json"]).stdout) or "{}")
+        daemon = str(data.get("Version") or "")
+        client_v, daemon_v = _ver_prefix(client), _ver_prefix(daemon)
+        if client_v and daemon_v and client_v != daemon_v:
+            problems.append(
+                f"client {client_v} != daemon {daemon_v} (mixed Tailscale "
+                "installs? quit the app, remove any Homebrew tailscale, restart)"
+            )
+    except Exception:  # noqa: BLE001 - never fail the check on a version hiccup
+        pass
+
+    # A tailnet IPv4 must be assigned; without one the tunnel has no data plane.
+    ipv4 = _run([ts_bin, "ip", "-4"])
+    if ipv4.returncode != 0 or not (ipv4.stdout or "").strip():
+        problems.append("no tailnet IPv4 (tunnel not up)")
+
+    # MagicDNS: resolve our own tailnet name.  When the network extension
+    # fails to install the split-DNS entry, status says up but the hostname
+    # does not resolve on this Mac.
+    try:
+        data = json.loads((_run([ts_bin, "status", "--json"]).stdout) or "{}")
+        dns_name = str((data.get("Self") or {}).get("DNSName") or "").rstrip(".")
+        if dns_name:
+            socket.getaddrinfo(dns_name, None)
+    except OSError:
+        problems.append(
+            "MagicDNS broken: our tailnet name does not resolve "
+            "(quit + reopen the Tailscale app)"
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
     try:
         serve = _run([ts_bin, "serve", "status", "--json"])
         data = json.loads(serve.stdout or "{}")
@@ -183,12 +238,19 @@ def check_tailscale(cfg: Config, ts_bin: Optional[str] = None) -> CheckResult:
         entry = next((k for k in web if k.endswith(port_key)), None)
     except Exception as exc:  # noqa: BLE001
         return WARN, f"tailscale up but serve status unreadable: {exc}"
-    if entry:
-        return PASS, f"tailscale up · serve {entry} → http://127.0.0.1:{cfg.port}"
-    return WARN, (
-        f"tailscale up but no serve entry for port {cfg.port} "
-        "(run scripts/tailscale-serve.sh for iPhone access)"
+
+    if not entry:
+        problems.append(
+            f"no serve entry for port {cfg.port} (run scripts/tailscale-serve.sh)"
+        )
+    base = (
+        f"tailscale up · serve {entry} → http://127.0.0.1:{cfg.port}"
+        if entry
+        else "tailscale up"
     )
+    if problems:
+        return WARN, base + " · " + "; ".join(problems)
+    return PASS, base
 
 
 def check_launchd() -> CheckResult:

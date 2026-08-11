@@ -338,6 +338,23 @@ def create_app(
             "result": result,
         })
 
+    def submit_error(
+        request: Request,
+        url: str,
+        result: Dict[str, Any],
+        status_code: int = 200,
+    ):
+        """Error result for POST /jobs: the #submit-area fragment for htmx
+        requests, the FULL index page (alert + URL prefill) for a plain
+        browser -- so a native form-submit fallback (JS missed/failed) never
+        renders a bare fragment as a page."""
+        if request.headers.get("HX-Request"):
+            return submit_area(request, submitted_url=url, result=result)
+        return render("index.html", request, {
+            "submitted_url": url,
+            "result": result,
+        }, status_code=status_code)
+
     # ------------------------------------------------------------------ #
     # optional single-user auth (PT_AUTH_TOKEN; Phase 3)
     # ------------------------------------------------------------------ #
@@ -467,7 +484,7 @@ def create_app(
                 url, top_results=cfg.top_results, duration_tolerance=cfg.duration_tolerance
             )
         except ValueError as exc:
-            return submit_area(request, submitted_url=url, result={
+            return submit_error(request, url, {
                 "kind": "error",
                 "headline": "Not a Spotify episode URL",
                 "message": str(exc),
@@ -476,7 +493,7 @@ def create_app(
             # Do not surface the raw exception (it can contain internal URLs /
             # hostnames); log the detail server-side instead.
             log.exception("resolution failed for %r", url)
-            return submit_area(request, submitted_url=url, result={
+            return submit_error(request, url, {
                 "kind": "error",
                 "headline": "Resolution failed",
                 "message": (
@@ -493,7 +510,7 @@ def create_app(
                 "REVIEW_REQUIRED": "Manual review required — no job created",
                 "UNAVAILABLE": "Episode unavailable — no job created",
             }.get(state, f"{state} — no job created")
-            return submit_area(request, submitted_url=url, result={
+            return submit_error(request, url, {
                 "kind": kind,
                 "headline": headline,
                 "message": result.reason if result is not None else "No result.",

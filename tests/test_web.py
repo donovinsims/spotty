@@ -150,6 +150,10 @@ def test_index_page_renders(store, tmp_path):
     assert r.status_code == 200
     assert "Spotify episode URL" in r.text
     assert 'hx-post="/jobs"' in r.text
+    # native-fallback form action stays on /jobs (no ?url= GET reload),
+    # and swapped-in fragments get processed immediately (no settle-race).
+    assert 'method="post" action="/jobs"' in r.text
+    assert 'name="htmx-config"' in r.text
     assert "Search stored episodes" in r.text
 
 
@@ -287,6 +291,9 @@ def test_post_jobs_invalid_url_shows_error(store, tmp_path):
         r = client.post("/jobs", data={"url": "https://example.com/not-a-podcast"})
     assert r.status_code == 200
     assert "Not a Spotify episode URL" in r.text
+    # native (non-htmx) POST renders the FULL page, never a bare fragment
+    assert "Search stored episodes" in r.text
+    assert "<html" in r.text
     assert store.list_jobs() == []
 
 
