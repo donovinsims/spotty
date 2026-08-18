@@ -1,38 +1,40 @@
-<section id="submit-area" class="card">
-  <h1>Transcribe a Spotify episode</h1>
-  <p class="muted">Paste an episode URL and we resolve it, download the audio,
+<section id="submit-area">
+  <h1>Transcribe <em>Spotify</em> episode</h1>
+  <p class="lead muted">Paste an episode URL and we resolve it, download the audio,
     and transcribe it locally with MLX Whisper — nothing leaves this machine.</p>
-  <!-- method/action = native fallback for any submit htmx misses: a plain
-       POST to /jobs creates the job (or shows the error on the full page)
-       instead of a confusing native GET reload with ?url=. -->
-  <form class="stack"
-        method="post" action="/jobs"
-        hx-post="/jobs"
-        hx-target="#submit-area"
-        hx-swap="outerHTML"
-        hx-indicator="#submit-indicator"
-        hx-disabled-elt="button[type=submit]">
-    <label for="url">Spotify episode URL</label>
-    <div class="row">
-      <input id="url" name="url" type="url" required
-             placeholder="https://open.spotify.com/episode/…"
-             value="{{ submitted_url or '' }}">
-      <button type="submit" class="btn">Transcribe</button>
+  <div class="card">
+    <!-- method/action = native fallback for any submit htmx misses: a plain
+         POST to /jobs creates the job (or shows the error on the full page)
+         instead of a confusing native GET reload with ?url=. -->
+    <form class="stack"
+          method="post" action="/jobs"
+          hx-post="/jobs"
+          hx-target="#submit-area"
+          hx-swap="outerHTML"
+          hx-indicator="#submit-indicator"
+          hx-disabled-elt="button[type=submit]">
+      <label for="url">Spotify episode URL</label>
+      <div class="row">
+        <input id="url" name="url" type="url" required
+               placeholder="https://open.spotify.com/episode/…"
+               value="{{ submitted_url or '' }}">
+        <button type="submit" class="btn">Transcribe</button>
+      </div>
+      <div id="submit-indicator" class="muted htmx-indicator" style="margin:4px 0 0" role="status">Resolving episode…</div>
+    </form>
+    {% if result %}
+    <div class="alert alert-{{ result.kind }}" role="{{ 'alert' if result.kind == 'error' else 'status' }}">
+      <strong>{{ result.headline }}</strong>
+      <p>{{ result.message }}</p>
+      {% if result.candidates %}
+      <ul class="candidates">
+        {% for c in result.candidates %}
+        <li>{{ c.title or c.audio_url or "Untitled episode" }} — confidence {{ (c.confidence * 100)|round(0)|int }}%{% if c.duration_seconds %} · ~{{ (c.duration_seconds / 60)|round(0)|int }} min{% endif %}</li>
+        {% endfor %}
+      </ul>
+      <p class="muted">If one of these looks right, paste the correct episode URL from Spotify.</p>
+      {% endif %}
     </div>
-    <div id="submit-indicator" class="muted htmx-indicator" style="margin:4px 0 0" role="status">Resolving episode…</div>
-  </form>
-  {% if result %}
-  <div class="alert alert-{{ result.kind }}" role="{{ 'alert' if result.kind == 'error' else 'status' }}">
-    <strong>{{ result.headline }}</strong>
-    <p>{{ result.message }}</p>
-    {% if result.candidates %}
-    <ul class="candidates">
-      {% for c in result.candidates %}
-      <li>{{ c.title or c.audio_url or "Untitled episode" }} — confidence {{ (c.confidence * 100)|round(0)|int }}%{% if c.duration_seconds %} · ~{{ (c.duration_seconds / 60)|round(0)|int }} min{% endif %}</li>
-      {% endfor %}
-    </ul>
-    <p class="muted">If one of these looks right, paste the correct episode URL from Spotify.</p>
     {% endif %}
   </div>
-  {% endif %}
 </section>
