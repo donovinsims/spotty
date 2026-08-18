@@ -1,39 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Transcript — Job {{ job.id }}{% endblock %}
 {% block content %}
-<a class="back" href="/jobs/{{ job.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Job {{ job.id }}</a>
+<div class="reader-container">
+  <a class="back" href="/jobs/{{ job.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Job {{ job.id }}</a>
 
-<div class="transcript-header">
-  <h1>{{ episode.title if episode and episode.title else "Transcript" }}</h1>
-  <p class="muted">{{ episode.show_name if episode and episode.show_name else "" }}{% if tx %} · {{ tx.segments }} segments{% endif %}</p>
-</div>
-
-<div class="actions">
-  <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download">Download .txt</a>
-  <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/srt">Download .srt</a>
-</div>
-
-<form class="search-inline"
-      hx-get="/jobs/{{ job.id }}/transcript/search"
-      hx-target="#search-results"
-      hx-swap="innerHTML"
-      hx-disabled-elt="button[type=submit]">
-  <input type="search" name="q" placeholder="Search this transcript…" aria-label="Search this transcript">
-  <button type="submit" class="btn btn-ghost">Search</button>
-</form>
-
-<div id="search-results" aria-live="polite"></div>
-
-{% if segments %}
-<div class="transcript">
-  {% for seg in segments %}
-  <div class="seg" id="seg-{{ loop.index0 }}">
-    <span class="ts">{{ seg.start_time|ts }}</span>
-    <span class="seg-text">{{ seg.text }}</span>
+  <div class="transcript-header">
+    <span class="label-caps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>Transcript</span>
+    <h1>{{ episode.title if episode and episode.title else "Transcript" }}</h1>
+    <p class="muted">{{ episode.show_name if episode and episode.show_name else "" }}{% if tx %} · {{ tx.segments }} segments{% endif %}</p>
   </div>
-  {% endfor %}
+
+  <div class="actions">
+    <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download">Download .txt</a>
+    <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/srt">Download .srt</a>
+  </div>
+
+  <form class="search-inline glass"
+        hx-get="/jobs/{{ job.id }}/transcript/search"
+        hx-target="#search-results"
+        hx-swap="innerHTML"
+        hx-disabled-elt="button[type=submit]">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    <input type="search" name="q" placeholder="Search this transcript…" aria-label="Search this transcript">
+    <button type="submit" class="btn btn-ghost">Search</button>
+  </form>
+
+  <div id="search-results" aria-live="polite"></div>
+
+  {% if segments %}
+  <div class="transcript">
+    {% for seg in segments %}
+    <div class="seg" id="seg-{{ loop.index0 }}">
+      <span class="ts label-caps">{{ seg.start_time|ts }}</span>
+      <span class="seg-text">{{ seg.text }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No transcript segments yet for this job.</p>
+  {% endif %}
 </div>
-{% else %}
-<p class="muted">No transcript segments yet for this job.</p>
-{% endif %}
 {% endblock %}

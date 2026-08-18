@@ -1,32 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Jobs{% endblock %}
+{% block title %}Library{% endblock %}
 {% block content %}
-<h1>Jobs</h1>
+<div class="library-header">
+  <h1>Library</h1>
+  <p class="label-caps">Recent Transcripts</p>
+</div>
 {% if rows %}
-<div class="card table-card" {% if active %}hx-get="/jobs" hx-trigger="every 10s" hx-select=".table-card" hx-swap="outerHTML"{% endif %}>
-  <table aria-label="Transcription jobs">
-    <thead>
-      <tr>
-        <th scope="col">ID</th>
-        <th scope="col">Status</th>
-        <th scope="col">Episode</th>
-        <th scope="col">Created</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for job, episode in rows %}
-      <tr>
-        <td class="muted">#{{ job.id }}</td>
-        <td><span class="badge badge-{{ job.status|lower }}">{{ job.status|label }}</span></td>
-        <td><a href="/jobs/{{ job.id }}">{{ episode.title if episode else "—" }}</a></td>
-        <td class="muted">{{ job.created_at|dt }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="job-list" aria-label="Transcription jobs" {% if active %}hx-get="/jobs" hx-trigger="every 10s" hx-select=".job-list" hx-swap="outerHTML"{% endif %}>
+  {% for job, episode in rows %}
+  <a href="/jobs/{{ job.id }}" class="job-card">
+    <div class="job-title">{{ episode.title if episode else "—" }}</div>
+    <div class="job-meta">
+      <span class="muted">#{{ job.id }}</span>{% if episode and episode.show_name %} · <span class="muted">{{ episode.show_name }}</span>{% endif %} · <span class="label-caps">{{ job.created_at|dt }}</span>
+    </div>
+    <span class="badge badge-{{ job.status|lower }}">{{ job.status|label }}</span>
+    {% if episode and episode.duration_seconds %}
+    <div class="job-duration">{{ (episode.duration_seconds / 60)|round(1) }} min</div>
+    {% endif %}
+  </a>
+  {% endfor %}
 </div>
 {% if rows|length == 100 %}<p class="muted">Showing the 100 most recent jobs.</p>{% endif %}
 {% else %}
-<p class="muted">No jobs yet — paste a Spotify episode URL on the <a href="/">home page</a>.</p>
+<p class="muted">No transcripts yet — paste a Spotify episode URL on the <a href="/">home page</a>.</p>
 {% endif %}
 {% endblock %}

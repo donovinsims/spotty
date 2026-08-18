@@ -4,7 +4,7 @@
 <p class="muted">{{ episodes|length }} {{ episodes|length|pluralize('episode') }} matching “{{ q }}”.</p>
 <ul class="episode-list">
   {% for ep in episodes %}
-  <li>
+  <li class="glass">
     <div>
       {% if ep_jobs.get(ep.id) %}
       <a href="/jobs/{{ ep_jobs[ep.id] }}"><strong>{{ ep.title or "Untitled episode" }}</strong></a>

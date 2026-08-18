@@ -1,40 +1,44 @@
-<section id="submit-area">
-  <h1>Transcribe <em>Spotify</em> episode</h1>
-  <p class="lead muted">Paste an episode URL and we resolve it, download the audio,
+<section id="submit-area" class="home-hero">
+  <h1 class="hero-title">Transcribe <em>Spotify</em> episode</h1>
+  <p class="hero-subtitle">Paste an episode URL and we resolve it, download the audio,
     and transcribe it locally with MLX Whisper — nothing leaves this machine.</p>
-  <div class="card">
-    <!-- method/action = native fallback for any submit htmx misses: a plain
-         POST to /jobs creates the job (or shows the error on the full page)
-         instead of a confusing native GET reload with ?url=. -->
-    <form class="stack"
-          method="post" action="/jobs"
-          hx-post="/jobs"
-          hx-target="#submit-area"
-          hx-swap="outerHTML"
-          hx-indicator="#submit-indicator"
-          hx-disabled-elt="button[type=submit]">
-      <label for="url">Spotify episode URL</label>
-      <div class="row">
-        <input id="url" name="url" type="url" required
-               placeholder="https://open.spotify.com/episode/…"
-               value="{{ submitted_url or '' }}">
-        <button type="submit" class="btn">Transcribe</button>
-      </div>
-      <div id="submit-indicator" class="muted htmx-indicator" style="margin:4px 0 0" role="status">Resolving episode…</div>
-    </form>
-    {% if result %}
-    <div class="alert alert-{{ result.kind }}" role="{{ 'alert' if result.kind == 'error' else 'status' }}">
-      <strong>{{ result.headline }}</strong>
-      <p>{{ result.message }}</p>
-      {% if result.candidates %}
-      <ul class="candidates">
-        {% for c in result.candidates %}
-        <li>{{ c.title or c.audio_url or "Untitled episode" }} — confidence {{ (c.confidence * 100)|round(0)|int }}%{% if c.duration_seconds %} · ~{{ (c.duration_seconds / 60)|round(0)|int }} min{% endif %}</li>
-        {% endfor %}
-      </ul>
-      <p class="muted">If one of these looks right, paste the correct episode URL from Spotify.</p>
-      {% endif %}
+
+  <!-- method/action = native fallback for any submit htmx misses: plain
+       POST to /jobs creates job (or shows error on the full page)
+       instead of a confusing native GET reload with ?url=. -->
+  <form class="stack"
+        method="post" action="/jobs"
+        hx-post="/jobs"
+        hx-target="#submit-area"
+        hx-swap="outerHTML"
+        hx-indicator="#submit-indicator"
+        hx-disabled-elt="button[type=submit]">
+    <label for="url" class="label-caps">Spotify episode URL</label>
+    <div class="hero-input">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <input id="url" name="url" type="url" required
+             placeholder="https://open.spotify.com/episode/…"
+             value="{{ submitted_url or '' }}">
     </div>
+    <button type="submit" class="process-btn">PROCESS TRANSCRIPT
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+    <p class="muted">HTTPS://OPEN.SPOTIFY.COM/EPISODE/…</p>
+    <div id="submit-indicator" class="muted htmx-indicator" role="status">Resolving episode…</div>
+  </form>
+
+  {% if result %}
+  <div class="alert alert-{{ result.kind }}" role="{{ 'alert' if result.kind == 'error' else 'status' }}">
+    <strong>{{ result.headline }}</strong>
+    <p>{{ result.message }}</p>
+    {% if result.candidates %}
+    <ul class="candidates">
+      {% for c in result.candidates %}
+      <li>{{ c.title or c.audio_url or "Untitled episode" }} — confidence {{ (c.confidence * 100)|round(0)|int }}%{% if c.duration_seconds %} · ~{{ (c.duration_seconds / 60)|round(0)|int }} min{% endif %}</li>
+      {% endfor %}
+    </ul>
+    <p class="muted">If one of these looks right, paste the correct episode URL from Spotify.</p>
     {% endif %}
   </div>
+  {% endif %}
 </section>

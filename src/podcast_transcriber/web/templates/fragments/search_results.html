@@ -10,7 +10,7 @@
 {% endif %}
 {% for m in matches %}
 <div class="seg" id="seg-{{ m.idx }}">
-  <span class="ts"><a class="ts" href="#seg-{{ m.idx }}">{{ m.start_time|ts }}</a></span>
+  <span class="ts label-caps"><a class="ts" href="#seg-{{ m.idx }}">{{ m.start_time|ts }}</a></span>
   <span class="seg-text">{{ m.highlighted|safe }}</span>
 </div>
 {% endfor %}

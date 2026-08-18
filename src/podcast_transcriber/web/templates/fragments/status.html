@@ -7,13 +7,15 @@
 
   {% if job.status == "RUNNING" %}
     {% if view.chunks_total > 0 %}
+    <div class="pct neon-glow">{{ view.progress_pct }}%</div>
     <div class="progress" role="progressbar" aria-label="Transcription progress"
          aria-valuenow="{{ view.chunks_done }}"
          aria-valuemin="0" aria-valuemax="{{ view.chunks_total }}">
       <div class="progress-fill" style="width: {{ view.progress_pct }}%"></div>
     </div>
-    <p class="muted">{{ view.progress_pct }}% done ({{ view.chunks_done }} of {{ view.chunks_total }} parts)</p>
+    <p class="muted progress-line">{{ view.progress_pct }}% done ({{ view.chunks_done }} of {{ view.chunks_total }} parts)</p>
     {% else %}
+    <p class="label-caps active-word">PROCESSING</p>
     <p class="muted">Downloading audio — progress appears once chunking starts…</p>
     {% endif %}
   {% elif job.status == "QUEUED" %}
@@ -27,12 +29,20 @@
       <button type="submit" class="btn btn-ghost btn-small">Cancel job</button>
     </form>
   {% elif job.status == "COMPLETE" %}
+    <span class="badge badge-complete">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+      Complete
+    </span>
     <p class="ok" role="status">Transcription complete — {{ view.segments_count }} {{ view.segments_count|pluralize('segment') }}.</p>
     <div class="actions">
       <a class="btn" href="/jobs/{{ job.id }}/transcript">View transcript</a>
       <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download">Download .txt</a>
     </div>
   {% elif job.status == "FAILED" %}
+    <span class="badge badge-failed">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      Failed
+    </span>
     <p class="err" role="alert">{{ job.error or "Job failed with no recorded error." }}</p>
     <div class="actions">
       <a class="btn" href="/">New transcription</a>

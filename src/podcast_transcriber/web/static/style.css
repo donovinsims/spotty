@@ -1,38 +1,103 @@
-/* podcast-transcriber — web UI. Spotify design language:
-   pure-black stage, 128px/900 hero with one word in the oblique cut,
-   full-range weight use (900 → 300), #1ED760 green for the filled pill
-   CTA only, flat #242424 cards, no panel borders, platform default sans
-   (Helvetica Neue / Helvetica / Arial) at normal line-height and tracking. */
+/* ============================================================================
+   podcast-transcriber — web UI. "Obsidian Flux" design system.
+   ----------------------------------------------------------------------------
+   Deep-obsidian (#050505) void stage, glass secondary layers, neon green→mint
+   kinetic accents. Inter for structural UI, JetBrains Mono for the transcript
+   reader pane and code-like metadata. Elevation is luminance + blur, never
+   drop shadows. All spacing on an 8px baseline; buttons stay 9999px pills.
 
+   Preserved behavior (do not regress):
+     - HTMX lifecycle classes (.htmx-indicator, .htmx-request, .htmx-swapping,
+       .htmx-settling, spotify-enter / badge-pop keyframes, #job-status silent
+       poll swap without flicker)
+     - prefers-reduced-motion kill switch
+     - skip-link, :focus-visible on every focusable element
+     - bottom tabbar at <=560px and/or display-mode: standalone, with
+       safe-area-inset padding on all fixed/bottom chrome
+     - mobile: single column, full-width buttons, jobs table → stacked cards
+     - search-inline form layout, segment :target outline
+   ========================================================================== */
+
+/* ---------- design tokens ---------- */
 :root {
-  /* Surfaces — the depth step: #000000 → #121212 → #222326 → #242424 */
-  --bg: #000000;
-  --bg-soft: #121212;
-  --card-2: #222326;
-  --card: #242424;
+  /* Neutrals — obsidian scale. --bg-void is the OLED stage; surface
+     containers step luminance upward; never shadows. */
+  --bg: #131313;
+  --bg-void: #050505;
+  --surface: #131313;
+  --surface-dim: #131313;
+  --surface-bright: #3a3939;
+  --surface-container-lowest: #0e0e0e;
+  --surface-container-low: #1c1b1b;
+  --surface-container: #201f1f;
+  --surface-container-high: #2a2a2a;
+  --surface-container-highest: #353534;
+  --surface-variant: #353534;
+  --on-surface: #e5e2e1;
+  --on-surface-variant: #bccbb9;
+  --inverse-surface: #e5e2e1;
+  --inverse-on-surface: #313030;
+  --outline: #869585;
+  --outline-variant: #3d4a3d;
 
-  /* Text */
+  /* Primary — Spotify-flux green. Primary actions and brand recognition. */
+  --primary: #53e076;
+  --on-primary: #003914;
+  --primary-container: #1db954;
+  --on-primary-container: #004118;
+  --inverse-primary: #006e2d;
+  --primary-fixed: #72fe8f;
+  --primary-fixed-dim: #53e076;
+  --on-primary-fixed: #002108;
+  --on-primary-fixed-variant: #005320;
+
+  /* Secondary — neon mint. Transcription highlights and active-state glow. */
+  --secondary: #f5fff5;
+  --on-secondary: #003920;
+  --secondary-container: #00ffa3;
+  --on-secondary-container: #007146;
+  --secondary-fixed: #52ffac;
+  --secondary-fixed-dim: #00e290;
+  --on-secondary-fixed: #002111;
+  --on-secondary-fixed-variant: #005231;
+
+  /* Tertiary — cool greys for neutral emphasis. */
+  --tertiary: #c8c6c5;
+  --on-tertiary: #313030;
+  --tertiary-container: #a3a1a1;
+  --on-tertiary-container: #383838;
+  --tertiary-fixed: #e5e2e1;
+  --tertiary-fixed-dim: #c8c6c5;
+  --on-tertiary-fixed: #1c1b1b;
+
+  /* Error */
+  --error: #ffb4ab;
+  --on-error: #690005;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+
+  /* Legacy text aliases — critical reading white, metadata grey. */
   --text: #ffffff;
   --muted: #b3b3b3;
   --muted-2: #a7a7a7;
-  --muted-3: #919496;
 
-  /* Accent — the filled pill CTA, and only that */
-  --accent: #1ed760;
-  --accent-ink: #000000;
-
-  /* The only 1px border in the system is the outline button */
-  --border-outline: #7f7f7f;
-  --overlay-white-10: rgba(255, 255, 255, 0.10);
-
-  /* Status accents (badge fills, progress, alerts) */
+  /* Status accents (badge fills, alerts) */
   --ok: #1ed760;
   --warn: #ffc862;
   --err: #ff453a;
   --pending: #576dd6;
   --running: #7358ff;
 
-  /* Editorial palette — plan cards and imagery only, never chrome */
+  /* Legacy compatibility aliases — kept so template markup maps 1:1 onto
+     the flux tokens (exercise removed CSS vars only if templates change). */
+  --card: var(--surface-container);
+  --card-2: var(--surface-container-high);
+  --bg-soft: var(--surface-container-low);
+  --accent: var(--primary);
+  --accent-ink: var(--on-primary);
+  --border-outline: var(--outline);
+
+  /* Editorial accent bands — job/episode card header palette (6-way cycle). */
   --ep-pink: #ffd2d7;
   --ep-lilac: #c4b1d4;
   --ep-periwinkle: #576dd6;
@@ -40,68 +105,92 @@
   --ep-olive: #5f8008;
   --ep-violet: #7358ff;
 
-  /* Type — platform default sans; line-height and tracking stay normal
-     at every size, including 128px. */
-  --font-display: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-body: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --type-hero: clamp(2.75rem, 11vw, 8rem); /* 128px hero */
-  --type-section: clamp(2rem, 8vw, 4rem);  /* 64px section */
-  --type-editorial: 3rem;                  /* 48px editorial h2 */
-  --type-lead: 2rem;                       /* 32px lead, weight 300 */
-  --type-subhead: 1.5rem;                  /* 24px sub-heading, weight 300 */
-  --type-body: 1rem;                       /* 16px body */
-  --type-caption: 0.75rem;                 /* 12px fine print */
+  /* Type — Inter for UI chrome, JetBrains Mono for the reader + metadata. */
+  --font-ui: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Spacing */
+  --type-display: 48px;            /* h1   — tight, compact editorial */
+  --type-headline: 32px;           /* h2   */
+  --type-headline-mobile: 24px;    /* h3   */
+  --type-body: 16px;               /* body */
+  --type-reader: 18px;             /* transcript reader pane */
+  --type-label-caps: 12px;         /* labels / timestamps */
+  --type-caption: 12px;
+
+  /* Spacing — 8px baseline grid */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
+  --container-margin: 40px;        /* desktop "theatrical" side margins */
+  --gutter-lg: 32px;
+  --reader-max-width: 800px;
+  --sidebar-width: 280px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;                /* DEFAULT */
+  --radius-lg: 16px;               /* cards / containers */
+  --radius-xl: 24px;               /* nested full-height panels */
+  --radius-full: 9999px;           /* pills */
 
   /* Metrics */
+  --nav-height: 72px;
+  --touch-target: 44px;
+  --progress-height: 4px;
   --container-max: 720px;
   --page-bottom-pad: 64px;
-  --touch-target: 44px;
-  --nav-height: 72px;
   --ts-col: 84px;
   --meta-col: 110px;
-  --progress-height: 6px;
   --field-basis: 260px;
   --search-basis: 200px;
 
-  /* Radius */
-  --radius-card: 10px;
-  --radius-lg: 24px;
-  --radius-pill: 9999px;
-
-  /* Motion — the house curve */
+  /* Motion — the house curve (fast in, no bounce). */
   --ease-house: cubic-bezier(0.3, 0, 0, 1);
+
+  /* Glass recipe — blur-heavy black + hairline white stroke. */
+  --glass-bg: rgba(0, 0, 0, 0.4);
+  --glass-border: rgba(255, 255, 255, 0.05);
+
+  /* Neon glow — primary-colored under-glow for active/interactive states. */
+  --neon-glow: 0 0 15px rgba(29, 185, 84, 0.3);
 }
 
+/* ---------- reset & base ---------- */
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--bg-void);
   color: var(--text);
-  font-family: var(--font-body);
+  font-family: var(--font-ui);
   font-size: var(--type-body);
-  line-height: normal;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
 }
 
 /* Links are white — green is never a link colour. */
-a { color: var(--text); text-decoration: none; }
+a { color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
 a:hover { text-decoration: underline; }
 
 .muted { color: var(--muted); }
 .ok { color: var(--ok); }
 .err { color: var(--err); }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--overlay-white-10, rgba(255, 255, 255, 0.10));
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+}
+
+/* ---------- accessibility ---------- */
 
 /* M18: keyboard users can jump straight to the main content. */
 .skip-link {
@@ -109,34 +198,96 @@ a:hover { text-decoration: underline; }
   left: -9999px;
   top: 0;
   background: var(--text);
-  color: var(--bg);
+  color: var(--bg-void);
   padding: var(--sp-2) var(--sp-4);
-  border-radius: 0 0 var(--radius-card) 0;
+  border-radius: 0 0 var(--radius-md) 0;
   font-weight: 700;
   z-index: 100;
 }
 .skip-link:focus { left: 0; }
 
+/* H11: keyboard focus is always visible, on every focusable element. */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ---------- elevation: glass & neon ---------- */
+
+/* Level 2 glass — floating bars, sidebars, overlays. */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Interaction highlight — soft primary under-glow. */
+.neon-glow { box-shadow: var(--neon-glow); }
+
 /* ---------- layout ---------- */
+
+/* Level 1 modules sit on the void with a hairline white stroke. */
+.card {
+  background: var(--surface-container);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  margin: var(--sp-4) 0;
+}
+
+/* Split-radius card: coloured header band (16px top corners) over the
+   surface body (16px bottom corners). */
+.card-split { padding: 0; overflow: hidden; }
+.card-header {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+  font-size: var(--type-headline-mobile);
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.card-body { padding: var(--sp-5); }
+
+/* Header bands — flux accent bands plus the legacy 6-colour editorial
+   cycle (job_detail cycles `band[(job.id|int) % 6]`). */
+.band-green { background: var(--primary-container); color: var(--on-primary); }
+.band-mint { background: var(--secondary-container); color: var(--on-secondary); }
+.band-surface { background: var(--surface-container-high); color: var(--on-surface); }
+.band-pink { background: var(--ep-pink); color: #121212; }
+.band-lilac { background: var(--ep-lilac); color: #121212; }
+.band-periwinkle { background: var(--ep-periwinkle); color: #ffffff; }
+.band-blue { background: var(--ep-blue); color: #ffffff; }
+.band-olive { background: var(--ep-olive); color: #ffffff; }
+.band-violet { background: var(--ep-violet); color: #ffffff; }
+
+/* Glass top navigation bar. */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
   height: var(--nav-height);
-  padding: 0 var(--sp-5);
-  background: #000000;
+  padding: 0 var(--sp-6);
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   position: sticky;
   top: 0;
   z-index: 10;
+}
+@media (max-width: 560px), (display-mode: standalone) {
+  /* PWA chrome: keep the bar clear of the notch / status strip. */
+  .topbar {
+    height: calc(var(--nav-height) + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
 }
 
 .brand {
   font-weight: 700;
   color: var(--text);
   font-size: var(--type-body);
-  line-height: normal;
-  letter-spacing: normal;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
 }
 .brand:hover { text-decoration: none; }
 
@@ -144,10 +295,10 @@ a:hover { text-decoration: underline; }
 .topnav a {
   color: var(--muted);
   padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-full);
   font-size: var(--type-body);
   font-weight: 700;
-  line-height: normal;
+  line-height: 1.5;
   min-height: var(--touch-target);
   display: inline-flex;
   align-items: center;
@@ -157,8 +308,46 @@ a:hover { text-decoration: underline; }
 .topnav a:hover { color: var(--text); text-decoration: none; }
 .topnav a[aria-current="page"] {
   color: var(--text);
-  background: var(--overlay-white-10);
+  background: var(--overlay-white-10, rgba(255, 255, 255, 0.10));
 }
+
+/* Glassmorphic sidebar — fixed-width (280px) vertical rail. Currently
+   reserved for the desktop reader layout; collapsed on small screens. */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 9;
+  padding: calc(var(--nav-height) + env(safe-area-inset-top)) var(--sp-4) var(--sp-6);
+  overflow-y: auto;
+}
+.sidebar li { list-style: none; }
+.sidebar ul { margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--touch-target);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s var(--ease-house), color 0.15s var(--ease-house);
+}
+.sidebar-nav-item:hover { color: var(--text); text-decoration: none; background: var(--overlay-white-10, rgba(255, 255, 255, 0.10)); }
+.sidebar-nav-item.active { color: var(--text); background: var(--overlay-white-10, rgba(255, 255, 255, 0.10)); box-shadow: inset 3px 0 0 var(--primary); }
 
 /* ---------- bottom tab bar (<=560px and/or standalone) ---------- */
 .tabbar { display: none; }
@@ -173,9 +362,14 @@ a:hover { text-decoration: underline; }
     z-index: 20;
     height: calc(49px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
-    background: #000000;
+    background: var(--glass-bg);
+    border-top: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
   }
-  .tabbar a {
+  /* Base template uses plain <a> children; .tabbar-item is the named form. */
+  .tabbar a,
+  .tabbar-item {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -187,16 +381,29 @@ a:hover { text-decoration: underline; }
     text-decoration: none;
     -webkit-tap-highlight-color: transparent;
   }
-  .tabbar a:hover { text-decoration: none; color: var(--text); }
-  .tabbar a[aria-current="page"] { color: var(--text); background: var(--overlay-white-10); }
+  .tabbar a:hover, .tabbar-item:hover { text-decoration: none; color: var(--text); }
+  .tabbar a[aria-current="page"], .tabbar-item.active {
+    color: var(--text);
+    background: var(--overlay-white-10, rgba(255, 255, 255, 0.10));
+  }
   .tabbar svg { width: 24px; height: 24px; }
   body { padding-bottom: calc(49px + env(safe-area-inset-bottom)); }
 }
 
+/* Page shell — theatrical side margins (40px), 8px-grid rhythm, with
+   clearance for the fixed tab bar when it is active. */
 .container {
   max-width: var(--container-max);
   margin: 0 auto;
-  padding: var(--sp-6) var(--sp-5)
+  padding: var(--sp-6) var(--container-margin)
+    calc(var(--page-bottom-pad) + env(safe-area-inset-bottom));
+}
+
+/* Reader pane — constrained to reading measure (800px). */
+.reader-container {
+  max-width: var(--reader-max-width);
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-6)
     calc(var(--page-bottom-pad) + env(safe-area-inset-bottom));
 }
 
@@ -207,29 +414,28 @@ a:hover { text-decoration: underline; }
   font-size: var(--type-caption);
 }
 
-/* ---------- type ---------- */
+/* ---------- typography ---------- */
 h1 {
-  font-family: var(--font-display);
-  font-size: var(--type-hero);
-  font-weight: 900;
-  line-height: normal;
-  letter-spacing: normal;
+  font-family: var(--font-ui);
+  font-size: var(--type-display);   /* 48px */
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
   margin: var(--sp-2) 0 var(--sp-3);
 }
 h2 {
-  font-family: var(--font-display);
-  font-size: var(--type-section);
-  font-weight: 800;
-  line-height: normal;
-  letter-spacing: normal;
+  font-family: var(--font-ui);
+  font-size: var(--type-headline);  /* 32px */
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   margin: 0 0 var(--sp-4);
 }
 h3 {
-  font-family: var(--font-display);
-  font-size: var(--type-subhead);
-  font-weight: 300;
-  line-height: normal;
-  letter-spacing: normal;
+  font-family: var(--font-ui);
+  font-size: var(--type-headline-mobile); /* 24px */
+  font-weight: 600;
+  line-height: 1.2;
   margin: 0 0 var(--sp-3);
 }
 
@@ -237,54 +443,87 @@ h3 {
 h1 em, .lead em { font-style: italic; }
 
 .lead {
-  font-family: var(--font-display);
-  font-size: var(--type-lead);
+  font-family: var(--font-ui);
+  font-size: 20px;                  /* body +4, light */
   font-weight: 300;
-  line-height: normal;
-  letter-spacing: normal;
+  line-height: 1.5;
   margin: 0 0 var(--sp-5);
+}
+
+/* Caps labels — JetBrains Mono, uppercase, wide tracking. Technical data. */
+.label-caps {
+  font-family: var(--font-mono);
+  font-size: var(--type-label-caps);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .transcript-header { margin-bottom: var(--sp-4); }
 
-/* ---------- cards ---------- */
-.card {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: var(--sp-5);
-  margin: var(--sp-4) 0;
-}
-
-/* Split-radius card: coloured header band (10px 10px 0 0) over the
-   flat #242424 body (0 0 10px 10px). No border anywhere. */
-.card-split { padding: 0; overflow: hidden; }
-.card-header {
-  margin: 0;
-  padding: var(--sp-4) var(--sp-5);
-  font-family: var(--font-display);
-  font-size: var(--type-subhead);
-  font-weight: 800;
-  line-height: normal;
-  letter-spacing: normal;
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
-}
-.card-body { padding: var(--sp-5); }
-.band-pink { background: var(--ep-pink); color: #121212; }
-.band-lilac { background: var(--ep-lilac); color: #121212; }
-.band-periwinkle { background: var(--ep-periwinkle); color: #ffffff; }
-.band-blue { background: var(--ep-blue); color: #ffffff; }
-.band-olive { background: var(--ep-olive); color: #ffffff; }
-.band-violet { background: var(--ep-violet); color: #ffffff; }
-
-.stack { display: grid; gap: var(--sp-3); }
-
-.row {
-  display: flex;
-  gap: var(--sp-3);
+/* ---------- buttons — every button is a 9999px pill at 16/700 ---------- */
+.btn {
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: center;
+  min-height: var(--touch-target);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  border-radius: var(--radius-full);
+  padding: 8px 32px;
+  font-family: var(--font-ui);
+  font-size: var(--type-body);
+  font-weight: 700;
+  line-height: 1.5;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s var(--ease-house),
+              transform 0.15s var(--ease-house),
+              box-shadow 0.15s var(--ease-house);
 }
-.row.small { gap: var(--sp-2); margin-top: var(--sp-2); font-size: var(--type-caption); }
+.btn:hover { text-decoration: none; filter: brightness(1.08); box-shadow: var(--neon-glow); }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+
+/* Ghost twin — hairline white stroke, white text, 10% white fill on hover. */
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  font-weight: 700;
+  transition: background-color 0.15s var(--ease-house),
+              transform 0.15s var(--ease-house);
+}
+.btn-ghost:hover { background: var(--overlay-white-10, rgba(255, 255, 255, 0.10)); box-shadow: none; }
+
+.btn-small {
+  padding: 4px 16px;
+  font-size: var(--type-caption);
+  min-height: 32px;
+}
+
+/* Icon-only button — 44px square, glass hover. */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s var(--ease-house), transform 0.15s var(--ease-house);
+}
+.btn-icon:hover { background: var(--overlay-white-10, rgba(255, 255, 255, 0.10)); }
+.btn-icon:active { transform: scale(0.94); }
 
 /* ---------- forms ---------- */
 label {
@@ -293,74 +532,37 @@ label {
   font-weight: 400;
 }
 
+/* Dark, borderless fields; 1px green border + soft glow on focus. */
 input[type="url"],
 input[type="search"],
 input[type="text"],
 input[type="password"] {
   flex: 1 1 var(--field-basis);
   min-width: 0;
-  background: var(--overlay-white-10);
+  background: var(--surface-container-low);
   border: 1px solid transparent;
   color: var(--text);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   padding: var(--sp-3) var(--sp-4);
   font-size: var(--type-body);
   -webkit-appearance: none;
   appearance: none;
+  transition: border-color 0.15s var(--ease-house), box-shadow 0.15s var(--ease-house);
 }
 
 ::placeholder { color: var(--muted); opacity: 1; }
 
-input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  border-color: var(--accent);
+input:focus-visible,
+input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px rgba(83, 224, 118, 0.35), 0 0 15px rgba(29, 185, 84, 0.22);
 }
 
-/* H11: keyboard focus is always visible, on every focusable element. */
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* ---------- buttons — every button is a 9999px pill at 16/700 ---------- */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 48px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: 0;
-  border-radius: var(--radius-pill);
-  padding: 8px 32px;
-  font-family: var(--font-body);
-  font-size: var(--type-body);
-  font-weight: 700;
-  line-height: normal;
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color 0.15s var(--ease-house),
-              transform 0.15s var(--ease-house);
-}
-.btn:hover { text-decoration: none; filter: brightness(1.08); }
-.btn:active { transform: scale(0.97); }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; }
-
-/* The transparent outline twin — the only 1px border in the system. */
-.btn-ghost {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--border-outline);
-  font-weight: 700;
-  transition: background-color 0.15s var(--ease-house),
-              transform 0.15s var(--ease-house);
-}
-.btn-ghost:hover { background: var(--overlay-white-10); }
-
-.btn-small {
-  padding: 4px 16px;
-  font-size: var(--type-caption);
-  min-height: 32px;
+/* Explicit focus-glow field. */
+.glow-input:focus {
+  border-color: var(--primary);
+  box-shadow: var(--neon-glow);
 }
 
 /* ---------- htmx in-flight feedback ---------- */
@@ -389,7 +591,7 @@ input:focus-visible {
   100% { transform: scale(1); }
 }
 
-/* The status fragment polls every ~2s while a job runs: re-animating the
+/* The status fragment polls every ~5s while a job runs: re-animating the
    whole card each poll would flicker, so it swaps silently and only the
    progress bar animates. */
 #job-status.htmx-swapping,
@@ -400,28 +602,16 @@ input:focus-visible {
 }
 #job-status .badge { animation: none; }
 
-/* All motion yields to prefers-reduced-motion. */
-@media (prefers-reduced-motion: reduce) {
-  .htmx-settling, .htmx-swapping, .htmx-request,
-  .progress-fill, .btn, .topnav a, .tabbar a, .back {
-    animation: none !important;
-    transition: none !important;
-  }
-}
-
-.search-inline { display: flex; gap: var(--sp-3); margin: var(--sp-3) 0; flex-wrap: wrap; }
-.search-inline input { flex: 1 1 var(--search-basis); }
-
-/* ---------- status badges — glass chips, no borders ---------- */
+/* ---------- status badges — glass chips ---------- */
 .badge {
   display: inline-block;
   padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-full);
   font-size: var(--type-caption);
   font-weight: 700;
-  line-height: normal;
+  line-height: 1.5;
   letter-spacing: normal;
-  background: var(--overlay-white-10);
+  background: var(--overlay-white-10, rgba(255, 255, 255, 0.10));
   color: var(--text);
 }
 .badge-pending { color: var(--pending); background: color-mix(in srgb, var(--pending) 15%, transparent); }
@@ -429,17 +619,19 @@ input:focus-visible {
 .badge-complete, .badge-verified { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
 .badge-queued, .badge-review_required { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
 .badge-failed, .badge-unavailable { color: var(--err); background: color-mix(in srgb, var(--err) 15%, transparent); }
+.badge-cancelled { color: var(--on-surface-variant); background: color-mix(in srgb, var(--outline) 15%, transparent); }
 
 /* ---------- alerts ---------- */
 .alert {
-  border: 0;
-  border-radius: var(--radius-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
   padding: var(--sp-3) var(--sp-4);
   margin-top: var(--sp-3);
-  background: var(--card);
+  background: var(--surface-container);
 }
-.alert-error { background: color-mix(in srgb, var(--err) 10%, var(--card)); }
-.alert-warn { background: color-mix(in srgb, var(--warn) 10%, var(--card)); }
+.alert-error { background: color-mix(in srgb, var(--err) 10%, var(--surface-container)); }
+.alert-warn { background: color-mix(in srgb, var(--warn) 10%, var(--surface-container)); }
+.alert-success { background: color-mix(in srgb, var(--ok) 10%, var(--surface-container)); }
 .alert strong { display: block; margin-bottom: var(--sp-1); }
 .alert p { margin: var(--sp-1) 0; }
 .alert ul { margin: var(--sp-2) 0 0; padding-left: 18px; }
@@ -447,18 +639,18 @@ input:focus-visible {
 
 .candidates { list-style: none; padding: 0; margin: var(--sp-2) 0 0; }
 
-/* ---------- progress ---------- */
+/* ---------- progress — 4px bar, green→mint flux fill ---------- */
 .progress {
   height: var(--progress-height);
-  border-radius: var(--radius-pill);
-  background: var(--card-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-container-high);
   overflow: hidden;
   margin: var(--sp-3) 0 var(--sp-1);
 }
 .progress-fill {
   height: 100%;
-  background: var(--accent);
-  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--primary-container), var(--secondary-container));
+  border-radius: var(--radius-full);
   transition: width 0.5s var(--ease-house);
 }
 
@@ -468,7 +660,7 @@ input:focus-visible {
   gap: var(--sp-2);
   flex-wrap: wrap;
 }
-.progress-line { font-size: var(--type-caption); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.progress-line { font-size: var(--type-caption); font-family: var(--font-mono); }
 
 .actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-3); }
 
@@ -476,36 +668,55 @@ input:focus-visible {
 .meta { display: grid; gap: var(--sp-2); margin: var(--sp-3) 0 0; }
 .meta > div { display: grid; grid-template-columns: var(--meta-col) 1fr; gap: var(--sp-2); }
 .meta dt { color: var(--muted); font-size: var(--type-caption); font-weight: 400; }
-.meta dd { margin: 0; font-size: var(--type-body); }
+.meta dd { margin: 0; font-size: var(--type-body); overflow-wrap: anywhere; }
 
-/* ---------- transcript ---------- */
+/* ---------- transcript (reader pane — JetBrains Mono) ---------- */
 .transcript { margin-top: var(--sp-4); }
 .seg {
   display: grid;
   grid-template-columns: var(--ts-col) 1fr;
   gap: var(--sp-3);
   padding: var(--sp-2) 0;
-  font-size: var(--type-body);
   scroll-margin-top: 90px;
 }
 .seg:target {
   outline: 2px solid rgba(255, 255, 255, 0.6);
   outline-offset: -2px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 .ts {
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: var(--type-caption);
   padding-top: var(--sp-1);
 }
-.seg-text { word-wrap: break-word; }
+.ts a { color: var(--muted); }
+.ts a:hover { color: var(--text); }
+.seg-text {
+  font-family: var(--font-mono);
+  font-size: var(--type-reader);
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  word-wrap: break-word;
+}
+
+/* Search highlight — green-tinted, keeps the flux accent. */
 mark {
-  background: rgba(255, 200, 98, 0.35);
+  background: rgba(0, 255, 163, 0.22);
   color: var(--text);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 0 2px;
 }
+
+/* Playing word — white, mint underline, subtle neon under-glow. */
+.active-word {
+  color: #ffffff;
+  border-bottom: 2px solid var(--secondary-container);
+  box-shadow: 0 2px 12px rgba(0, 255, 163, 0.35);
+}
+
+/* Words before the playhead — muted at 60% to keep focus on now. */
+.inactive-text { color: var(--muted-2); opacity: 0.6; }
 
 .search-summary { margin: var(--sp-1) 0 var(--sp-2); font-size: var(--type-body); }
 
@@ -528,50 +739,134 @@ mark {
   margin-right: 2px;
 }
 
-/* ---------- tables — flat, no dividers ---------- */
+/* ---------- jobs list ---------- */
+.job-card {
+  display: grid;
+  gap: var(--sp-2);
+  background: var(--surface-container);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4) var(--sp-5);
+  margin: var(--sp-3) 0;
+  text-decoration: none;
+  transition: box-shadow 0.15s var(--ease-house), border-color 0.15s var(--ease-house);
+}
+.job-card:hover {
+  text-decoration: none;
+  border-color: rgba(83, 224, 118, 0.45);
+  box-shadow: var(--neon-glow);
+}
+.job-title { font-weight: 600; font-size: var(--type-body); }
+.job-meta { font-size: var(--type-caption); font-family: var(--font-mono); color: var(--muted); }
+
+/* ---------- episode card ---------- */
+.episode-card { /* companion to .card .card-split on the job detail page */ }
+
+/* ---------- episode search results ---------- */
+.episode-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: grid; gap: var(--sp-2); }
+.episode-list li {
+  background: var(--surface-container-low);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-3) var(--sp-3);
+}
+
+/* ---------- tables — flat, hairline, no dividers ---------- */
 .table-card { padding: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { width: 100%; border-collapse: collapse; font-size: var(--type-body); }
 th, td { text-align: left; padding: var(--sp-3) var(--sp-4); }
 th {
   font-size: var(--type-caption);
-  font-weight: 400;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
   color: var(--muted);
-  background: var(--bg-soft);
+  background: var(--surface-container-low);
 }
-td:first-child, th:first-child { padding-left: var(--sp-5); }
-td:last-child, th:last-child { padding-right: var(--sp-5); }
+td:first-child, th:first-child { padding-left: var(--sp-6); }
+td:last-child, th:last-child { padding-right: var(--sp-6); }
 td a { display: inline-block; min-height: 24px; }
+td { overflow-wrap: anywhere; }
 
-/* ---------- episode search results ---------- */
-.episode-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: grid; gap: var(--sp-2); }
-.episode-list li {
-  background: var(--bg-soft);
-  border-radius: var(--radius-card);
-  padding: var(--sp-3) var(--sp-3);
+/* ---------- home hero ---------- */
+.home-hero {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  text-align: center;
+  padding: var(--gutter-lg) 0;
 }
+.hero-title { margin-bottom: var(--sp-3); }
+.hero-subtitle { max-width: 52ch; margin: 0 auto var(--sp-6); }
+.hero-input {
+  width: min(100%, 560px);
+  background: var(--surface-container-low);
+  border: 1px solid transparent;
+  color: var(--text);
+  border-radius: var(--radius-full);
+  padding: var(--sp-4) var(--sp-5);
+  font-size: var(--type-body);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color 0.15s var(--ease-house), box-shadow 0.15s var(--ease-house);
+}
+.hero-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--neon-glow);
+}
+.process-btn {
+  min-height: calc(var(--touch-target) + 4px);
+  padding: var(--sp-3) var(--sp-6);
+  border-radius: var(--radius-full);
+}
+.process-btn:hover { box-shadow: var(--neon-glow); }
+
+/* ---------- login ---------- */
+.login-card {
+  max-width: 420px;
+  margin: var(--sp-6) auto;
+}
+.login-header { /* alias of .card-header */ }
+.login-body { /* alias of .card-body */ }
+
+/* ---------- error page ---------- */
+.error-page {
+  text-align: center;
+  padding: var(--gutter-lg) 0;
+}
+
+/* ---------- misc layout helpers ---------- */
+.stack { display: grid; gap: var(--sp-3); }
+
+.row {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.row.small { gap: var(--sp-2); margin-top: var(--sp-2); font-size: var(--type-caption); }
+
+.search-inline { display: flex; gap: var(--sp-3); margin: var(--sp-3) 0; flex-wrap: wrap; }
+.search-inline input { flex: 1 1 var(--search-basis); border-radius: var(--radius-full); } /* search bars stay pill */
 
 /* ---------- small screens ---------- */
 /* Long episode titles / URLs must wrap, never push the layout wide. */
-td { overflow-wrap: anywhere; }
-.meta dd { overflow-wrap: anywhere; }
-a { overflow-wrap: anywhere; }
-
 @media (max-width: 560px) {
   :root {
     --page-bottom-pad: 56px;
     --ts-col: 72px;
-    --progress-height: 8px;
+    --progress-height: 8px;   /* iOS-friendly touch readability */
+    --container-margin: 16px; /* DESIGN: margins reduce to 16px */
   }
-  .container { padding: var(--sp-4) var(--sp-3) var(--page-bottom-pad); }
+  .container { padding: var(--sp-4) var(--container-margin) var(--page-bottom-pad); }
   .topbar { padding: 0 var(--sp-4); }
   .row { flex-direction: column; align-items: stretch; gap: var(--sp-2); }
-  .row .btn { width: 100%; }
-  .btn { width: 100%; text-align: center; }
+  .row .btn, .btn { width: 100%; text-align: center; }
   .footer .btn { width: auto; }
   .search-inline { flex-direction: column; }
   .search-inline .btn { width: 100%; }
   .meta > div { grid-template-columns: 1fr; gap: 2px; }
-  .seg { grid-template-columns: var(--ts-col) 1fr; gap: var(--sp-2); font-size: 0.95rem; }
+  .seg { grid-template-columns: var(--ts-col) 1fr; gap: var(--sp-2); }
 
   /* H10: the jobs table becomes stacked cards instead of overflowing. */
   .table-card table, .table-card tbody, .table-card tr, .table-card td { display: block; width: 100%; }
@@ -579,4 +874,15 @@ a { overflow-wrap: anywhere; }
   .table-card tr { padding: var(--sp-3) var(--sp-3); }
   .table-card td { padding: var(--sp-1) 0; }
   .table-card td:first-child { padding-left: 0; }
+}
+
+/* ---------- motion — all of it yields to prefers-reduced-motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .htmx-settling, .htmx-swapping, .htmx-request,
+  .progress-fill, .btn, .btn-icon, .topnav a, .tabbar a, .tabbar-item,
+  .sidebar-nav-item, .job-card, input[type="url"], input[type="search"],
+  input[type="text"], input[type="password"], .hero-input, .back {
+    animation: none !important;
+    transition: none !important;
+  }
 }

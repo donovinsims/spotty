@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Sign in{% endblock %}
 {% block content %}
-<section class="card card-split">
-  <h2 class="card-header band-lilac">Sign in</h2>
+<section class="card card-split glass login-card" style="max-width: 400px; margin: var(--sp-6) auto;">
+  <h2 class="card-header band-green label-caps">SIGN IN</h2>
   <div class="card-body">
     <p class="muted">This instance is protected. Enter the access token from
       <code>PT_AUTH_TOKEN</code> (repo <code>.env</code>).</p>
     {% if error %}
-    <p class="err" role="alert">{{ error }}</p>
+    <div class="alert alert-error" role="alert">
+      <strong>Sign in failed</strong>
+      <p>{{ error }}</p>
+    </div>
     {% endif %}
     <form class="stack" method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') | urlencode }}{% endif %}">
       <label for="token">Access token</label>
