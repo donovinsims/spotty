@@ -87,6 +87,58 @@ https://donovins-macbook-pro.taila94639.ts.net:8765
        with a network error — this is expected (PWA-lite, online app).
 4. [ ] Reconnect Tailscale and confirm the app works again.
 
+## 4b. iOS-native UI diagnostic (ios-hig-design)
+
+Run against the live instance in **both** Safari and Home-Screen standalone.
+Score the Quick Diagnostic (6 rows = 1 pt each) + up to 4 native-idiom
+points. Target: **≥ 9/10**.
+
+Checklist (one point per row):
+- [ ] **Safe areas** — no content under the notch/Dynamic Island or home
+      indicator; topbar, bottom tab bar, and page bottom clear the insets in
+      browser and standalone modes (viewport-fit=cover + `env()` insets).
+- [ ] **Touch targets ≥ 44pt** — buttons, nav links, tab bar items, back
+      links; no mis-taps.
+- [ ] **Dark Mode** — toggle appearance; both schemes render with semantic
+      iOS colors (systemBlue/Indigo accent, label/secondaryLabel,
+      systemBackground layers); cards, badges, progress, fields all legible.
+- [ ] **Dynamic Type** — Settings → Accessibility → Display & Text Size →
+      Largest; text scales (rem tokens), nothing clips or overflows on a
+      ~390pt screen.
+- [ ] **VoiceOver** — complete one flow (submit → status → transcript);
+      `aria-live` results, ARIA progressbar, `aria-current` tabs, tab bar
+      labels, skip link all present.
+- [ ] **Native navigation** — blur topbar, large title, bottom tab bar
+      (New/Jobs, 49pt, blur, safe-area bottom), chevron back links; no
+      hamburger menus, no Android idioms.
+
+Native idiom (up to 4):
+- [ ] +1 Semantic colors/text styles throughout — no hardcoded layout/type
+      values outside the `:root` token layer.
+- [ ] +1 System controls / semantic HTML (web limitation: UIKit controls
+      N/A — credit at reviewer's discretion).
+- [ ] +1 Standard gestures — Safari edge-swipe back works; tap scale
+      feedback present (haptics N/A on web).
+- [ ] +1 SF-Symbol-like inline glyphs (chevron/plus/list) + iOS squircle
+      icon mask (icon-192.png reused; 1024px icon deferred — no artwork).
+
+General checks:
+- [ ] Light + dark both render cleanly (appearance toggle).
+- [ ] Desktop Safari (Mac): no dark-only regression; layout still usable.
+- [ ] Settings → Accessibility → Reduce Motion: swap animations and tap
+      scale disabled (CSS `prefers-reduced-motion`).
+
+Known limitations (do not fail the run):
+- **Splash screen:** no `apple-touch-startup-image` — image generation is
+  excluded, so iOS shows its default launch screen. Revisit if artwork
+  becomes available.
+- **Haptics / true SF Symbols / native controls** require a native app —
+  out of scope for this web UI.
+- Expected from code review: **8–9/10** (9 requires crediting inline glyphs
+  as the SF-Symbol equivalent; 10 is blocked by web-platform constraints).
+
+On-device score (browser): ___ / 10 · (standalone): ___ / 10
+
 ## 5. Final pass
 
 1. [ ] Rotate the phone (portrait/landscape) on the jobs list, job detail, and
