@@ -11,6 +11,7 @@ the same database file (WAL allows concurrent readers + one writer).
 from __future__ import annotations
 
 import html as html_mod
+import json
 import logging
 import re
 import threading
@@ -27,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__
+from .. import export as export_mod
 from ..config import Config, get_config, is_loopback_host
 from ..download import download_episode
 from ..resolve import resolve as do_resolve
@@ -89,14 +91,14 @@ def fmt_dt(iso: Optional[str]) -> str:
     return iso[:16].replace("T", " ")
 
 
-def fmt_srt(seconds: Optional[float]) -> str:
+def fmt_dur(seconds: Optional[float]) -> str:
+    """Seconds -> compact M:SS or H:MM:SS (library card durations)."""
     if not seconds:
-        seconds = 0.0
-    seconds = max(0.0, float(seconds))
-    ms = int(round((seconds - int(seconds)) * 1000))
-    h, rem = divmod(int(seconds), 3600)
-    m, s = divmod(rem, 60)
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+        return ""
+    seconds = max(0, int(round(float(seconds))))
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
 def _highlight_matches(segments: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
@@ -228,6 +230,7 @@ def create_app(
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.filters["ts"] = fmt_ts
     templates.env.filters["dt"] = fmt_dt
+    templates.env.filters["dur"] = fmt_dur
 
     # H4: human-friendly status labels (internal enums stay in the DB).
     _STATUS_LABELS = {
@@ -277,13 +280,15 @@ def create_app(
         cps = s.checkpoints_for_job(job.id)  # type: ignore[arg-type]
         done = sum(1 for c in cps if c.get("status") == "done")
         total = job.chunk_count or 0
-        pct = round(done / total * 100) if total else 0
+        pct = min(round(done / total * 100) if total else 0, 100)
+        phase = 0 if not total or pct <= 0 else (1 if pct <= 33 else (2 if pct <= 66 else 3))
         segs = s.segments_for_job(job.id) if job.status == JOB_COMPLETE else []  # type: ignore[arg-type]
         return {
             "job": job,
             "chunks_done": done,
             "chunks_total": total,
-            "progress_pct": min(pct, 100),
+            "progress_pct": pct,
+            "phase": phase,
             "last_progress": worker_mod.progress_for(job.id or 0),
             "segments_count": len(segs),
             "active": job.status in _POLLING_STATUSES,
@@ -631,42 +636,47 @@ def create_app(
         return transcript_search_response(request, job_id, q)
 
     @app.get("/jobs/{job_id}/transcript/download")
-    def transcript_download(job_id: int):
+    def transcript_download(job_id: int, format: str = "txt"):
         job = job_or_404(job_id)
+        if format not in ("txt", "md", "json", "srt"):
+            format = "txt"
         s = store()
         episode = s.get_episode(job.episode_id)  # type: ignore[arg-type]
+        tx = s.get_transcript(job_id)
         segments = s.segments_for_job(job_id)  # type: ignore[arg-type]
-        lines = [
-            f"Title: {episode.title if episode else ''}",
-            f"Show: {episode.show_name if episode else ''}",
-            f"Source: {episode.url if episode else ''}",
-            f"Job: {job.id}",
-            "",
-        ]
-        for seg in segments:
-            lines.append(f"[{fmt_ts(seg.get('start_time'))}] {seg.get('text') or ''}")
-        body = "\n".join(lines) + "\n"
-        return PlainTextResponse(
-            body,
-            media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="transcript-{job.id}.txt"'},
-        )
+
+        if format == "md":
+            body = export_mod.transcript_to_markdown(episode, job, tx, segments)
+            media, payload = "text/markdown; charset=utf-8", body
+        elif format == "json":
+            payload = export_mod.transcript_to_json(episode, job, tx, segments)
+            body = json.dumps(payload, indent=2, default=str)
+            media, payload = "application/json; charset=utf-8", body
+        elif format == "srt":
+            body = export_mod.transcript_to_srt(segments)
+            media, payload = "text/plain; charset=utf-8", body
+        else:
+            body = export_mod.transcript_to_txt(episode, job, segments)
+            media, payload = "text/plain; charset=utf-8", body
+
+        fname = (export_mod.build_transcript_filename(episode, format, job_id=job_id)
+                 if episode else f"transcript-{job_id}.{format}")
+        headers = {"Content-Disposition": f'attachment; filename="{fname}"'}
+        return PlainTextResponse(payload, media_type=media, headers=headers)
 
     @app.get("/jobs/{job_id}/transcript/srt")
     def transcript_srt(job_id: int):
         job = job_or_404(job_id)
-        segments = store().segments_for_job(job_id)  # type: ignore[arg-type]
-        blocks = []
-        for i, seg in enumerate(segments, start=1):
-            blocks.append(
-                f"{i}\n{fmt_srt(seg.get('start_time'))} --> {fmt_srt(seg.get('end_time'))}\n"
-                f"{seg.get('text') or ''}\n"
-            )
-        body = "\n".join(blocks)
+        s = store()
+        episode = s.get_episode(job.episode_id)  # type: ignore[arg-type]
+        segments = s.segments_for_job(job_id)  # type: ignore[arg-type]
+        body = export_mod.transcript_to_srt(segments)
+        fname = (export_mod.build_transcript_filename(episode, "srt", job_id=job_id)
+                 if episode else f"transcript-{job_id}.srt")
         return PlainTextResponse(
             body,
             media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="transcript-{job.id}.srt"'},
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
         )
 
     @app.get("/search")

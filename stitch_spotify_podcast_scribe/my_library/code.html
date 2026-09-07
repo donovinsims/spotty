@@ -1,0 +1,264 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>VOX_TRANSCRIPT - Library</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface-variant": "#bccbb9",
+                        "on-tertiary-container": "#383838",
+                        "surface-container-lowest": "#0e0e0e",
+                        "surface": "#131313",
+                        "secondary-fixed-dim": "#00e290",
+                        "on-secondary-fixed-variant": "#005231",
+                        "tertiary": "#c8c6c5",
+                        "on-primary": "#003914",
+                        "primary-fixed-dim": "#53e076",
+                        "secondary-container": "#00ffa3",
+                        "secondary": "#f5fff5",
+                        "primary-fixed": "#72fe8f",
+                        "surface-bright": "#3a3939",
+                        "surface-tint": "#53e076",
+                        "on-error": "#690005",
+                        "error-container": "#93000a",
+                        "on-primary-fixed-variant": "#005320",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#313030",
+                        "surface-container-highest": "#353534",
+                        "surface-container-low": "#1c1b1b",
+                        "on-tertiary": "#313030",
+                        "surface-container": "#201f1f",
+                        "surface-dim": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "tertiary-fixed-dim": "#c8c6c5",
+                        "surface-container-high": "#2a2a2a",
+                        "on-error-container": "#ffdad6",
+                        "primary": "#53e076",
+                        "secondary-fixed": "#52ffac",
+                        "tertiary-fixed": "#e5e2e1",
+                        "outline": "#869585",
+                        "inverse-surface": "#e5e2e1",
+                        "outline-variant": "#3d4a3d",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary-fixed": "#1c1b1b",
+                        "inverse-primary": "#006e2d",
+                        "on-primary-container": "#004118",
+                        "surface-variant": "#353534",
+                        "tertiary-container": "#a3a1a1",
+                        "on-secondary": "#003920",
+                        "on-secondary-fixed": "#002111",
+                        "background": "#131313",
+                        "primary-container": "#1db954",
+                        "on-tertiary-fixed-variant": "#474646",
+                        "on-primary-fixed": "#002108",
+                        "on-secondary-container": "#007146"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-margin": "40px",
+                        "reader-max-width": "800px",
+                        "sidebar-width": "280px",
+                        "gutter-lg": "32px",
+                        "base": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["JetBrains Mono"],
+                        "reader-pane": ["JetBrains Mono"],
+                        "display-lg": ["Inter"],
+                        "body-ui": ["Inter"],
+                        "headline-md-mobile": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "700" }],
+                        "reader-pane": ["18px", { "lineHeight": "1.6", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700" }],
+                        "body-ui": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "headline-md-mobile": ["24px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-md": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: theme('colors.background'); color: theme('colors.on-background'); }
+        .glass-panel { background: rgba(19, 19, 19, 0.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .neon-glow:hover { box-shadow: 0 0 15px rgba(29, 185, 84, 0.3); }
+        /* Hide scrollbar for clean aesthetic */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: theme('colors.surface-variant'); border-radius: 4px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="antialiased flex h-screen overflow-hidden" style="background-color: rgb(0, 0, 0);">
+<!-- NavigationDrawer (Desktop) -->
+<aside class="fixed inset-y-0 left-0 w-sidebar-width bg-background/95 backdrop-blur-3xl border-r border-white/5 shadow-2xl flex flex-col p-6 space-y-4 z-40 hidden md:flex" style="background-color: rgb(0, 0, 0);">
+<!-- Profile Header -->
+<div class="flex items-center space-x-3 mb-8">
+<img alt="User Profile" class="w-12 h-12 rounded-full object-cover border border-white/10" data-alt="A highly detailed close-up portrait of a futuristic professional in a low-light cyberpunk setting, wearing subtle glowing cybernetic earpieces, dramatic rim lighting in neon green and deep purple." src="https://lh3.googleusercontent.com/aida-public/AB6AXuARsasLT_mraYRx4rUQa7iC6W8frDkqLVKogjpAvBnYJLbqflxyILZKje7H2_ITAy_gGTEazQaepAHZB86aEgz1_vVApvpAJFCjQsD4QXYSoaNsJhIU42YwGKAxPfwKlmFzf6OISuEkktdIXAkRtDm8TIxkdKJ-nGT1m55LFKWVk3z3balaDbhYzRuLHNZ7FsmZNms4Hl2kz9Q7PhOiLd7ltheGi-BPMnzaTSlNwHzm0r_QahVKLbb4eg">
+<div>
+<h3 class="text-primary font-bold font-body-ui text-body-ui">Power User</h3>
+<p class="text-on-surface-variant text-xs">Pro Plan <span class="mx-1">•</span> 24h Remaining</p>
+</div>
+</div>
+<nav class="flex-1 space-y-2">
+<!-- Active Tab: Library -->
+<a class="flex items-center space-x-3 px-4 py-3 bg-primary-container text-on-primary-container rounded-lg border-l-4 border-primary translate-x-1 font-label-caps text-label-caps" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span class="">Library</span>
+</a>
+<!-- Inactive Tabs -->
+<a class="flex items-center space-x-3 px-4 py-3 text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+<span class="">Drafts</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="ios_share">ios_share</span>
+<span class="">Exported</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="">History</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col md:ml-sidebar-width h-screen overflow-y-auto">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-container-margin py-4 top-0 sticky z-30 bg-background/80 backdrop-blur-xl border-b border-white/5" style="background-color: rgba(0, 0, 0, 0.8);">
+<div class="flex items-center space-x-4">
+<!-- Hamburger for mobile, hidden on desktop -->
+<button class="md:hidden text-primary hover:text-primary-fixed transition-colors">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="font-label-caps text-label-caps tracking-tighter text-primary">VOX_TRANSCRIPT</h1>
+</div>
+<div class="flex items-center space-x-4">
+<img alt="User Profile" class="w-8 h-8 rounded-full border border-white/10" data-alt="A small circular avatar placeholder image showing a minimalistic abstract geometric shape in neon green against a deep black background, high contrast futuristic style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDubNuTGzESQaBmu-XAmh4agFRFsgIiSt_JZdqBsyTcoftCp4UN3Vt33a6ZjhfRnBOYImD6bvc2wayrEf3xTXA4k8jLX4SnyexqKiX4YuY17xYi6zjtlMk75fc_Go-K3BmqGCVZVP0SG4uoIDpcLOYE5OG-qvBlcmZ_XR4Fapg4YuC_qVoHf9o_kFt8gZweVAGGIa0zfNs_mxn4YRqcuDIwYPk96nNs3PzUqvj0-8pf5gaI2XcFlhISiw">
+</div>
+</header>
+<!-- Library Content Canvas -->
+<div class="px-4 md:px-container-margin py-8 max-w-reader-max-width w-full mx-auto pb-24 md:pb-8">
+<div class="flex justify-between items-end mb-8">
+<h2 class="font-display-lg text-headline-md-mobile md:text-display-lg text-on-surface">Library</h2>
+<div class="text-on-surface-variant font-label-caps text-label-caps">Recent Transcripts</div>
+</div>
+<!-- List Grid -->
+<div class="space-y-4">
+<!-- Card 1 -->
+<div class="group flex flex-col md:flex-row gap-4 bg-surface border border-white/5 rounded-xl p-4 hover:border-primary/30 neon-glow transition-all duration-300 cursor-pointer relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+<img alt="Podcast Cover" class="w-full md:w-32 h-32 object-cover rounded-lg" data-alt="A square podcast cover art featuring a vibrant, abstract synthwave landscape with glowing neon grids and a dark violet sky, highly detailed and evocative of deep tech conversations." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDTMUSkmRMIkRAwDmmKyrCiPou1-g8Y0nMBRWAFCwUpyBnYG-Rsn0ZT_qpfDI_fGPD7upz-iWq67UIBMAHbB4qbqED9MV_XChmKX9PO_Cu7NBVXxMi8EHmiCt7NN1sSN3ZwUc5XqQCfTOC0hU1SgsPpjq3JJUngPGXemFJW8HzHg0bFiFIuWzW9RY6Zue6b6RmzZjqtJ1etqhXNXLrqVb9GEVd3MTUtdyUFWPN6OfHWoehg0UCtRXv-SA">
+<div class="flex flex-col justify-between flex-1">
+<div>
+<div class="flex justify-between items-start">
+<h3 class="font-body-ui text-body-ui font-semibold text-on-surface group-hover:text-primary transition-colors line-clamp-2">The Future of AI Integration in Design Workflows</h3>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors text-xl" data-icon="play_circle">play_circle</span>
+</div>
+<p class="text-on-surface-variant text-sm mt-1">Design Ops Podcast</p>
+</div>
+<div class="flex items-center space-x-4 mt-4 md:mt-0">
+<span class="inline-flex items-center space-x-1 text-xs text-on-surface-variant font-label-caps">
+<span class="material-symbols-outlined text-[16px]" data-icon="schedule">schedule</span>
+<span class="">45:20</span>
+</span>
+<span class="inline-flex items-center space-x-1 text-xs text-on-surface-variant font-label-caps">
+<span class="material-symbols-outlined text-[16px]" data-icon="calendar_today">calendar_today</span>
+<span class="">Oct 24, 2023</span>
+</span>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group flex flex-col md:flex-row gap-4 bg-surface border border-white/5 rounded-xl p-4 hover:border-primary/30 neon-glow transition-all duration-300 cursor-pointer relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+<img alt="Podcast Cover" class="w-full md:w-32 h-32 object-cover rounded-lg" data-alt="A square podcast cover art showing a minimalist, monochromatic rendering of a human brain merging with a circuit board, predominantly black with sharp white and subtle green accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2y3QzasR8hqOFAq9G8FmTEGE-muQY5ocA3wcAAEKU3IEnsv9ITqdUHMkZ-RPxPMEo_34MOSNOoAohXX_fKc3Tzp9OPJ0iO0J8R2LfT6T6vHpkayQZjAr206mweIn-8zf9HhssOT0jJq9jsq5T-TCw3gIvg5DPSQKtCZvhUI3QG_f5qY5g3aauKB8SAv2k20YoIBFLsv8KjiTGQ_wP40dqJoeJpj50FU8pTsWZBFS3N7nxeMa53FNn0Q">
+<div class="flex flex-col justify-between flex-1">
+<div>
+<div class="flex justify-between items-start">
+<h3 class="font-body-ui text-body-ui font-semibold text-on-surface group-hover:text-primary transition-colors line-clamp-2">Understanding Large Language Models for Developers</h3>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors text-xl" data-icon="play_circle">play_circle</span>
+</div>
+<p class="text-on-surface-variant text-sm mt-1">Tech Talk Daily</p>
+</div>
+<div class="flex items-center space-x-4 mt-4 md:mt-0">
+<span class="inline-flex items-center space-x-1 text-xs text-on-surface-variant font-label-caps">
+<span class="material-symbols-outlined text-[16px]" data-icon="schedule">schedule</span>
+<span class="">1:12:05</span>
+</span>
+<span class="inline-flex items-center space-x-1 text-xs text-on-surface-variant font-label-caps">
+<span class="material-symbols-outlined text-[16px]" data-icon="calendar_today">calendar_today</span>
+<span class="">Oct 22, 2023</span>
+</span>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="group flex flex-col md:flex-row gap-4 bg-surface border border-white/5 rounded-xl p-4 hover:border-primary/30 neon-glow transition-all duration-300 cursor-pointer relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+<div class="w-full md:w-32 h-32 rounded-lg bg-surface-container-high flex items-center justify-center border border-white/5">
+<span class="material-symbols-outlined text-4xl text-on-surface-variant" data-icon="mic">mic</span>
+</div>
+<div class="flex flex-col justify-between flex-1">
+<div>
+<div class="flex justify-between items-start">
+<h3 class="font-body-ui text-body-ui font-semibold text-on-surface group-hover:text-primary transition-colors line-clamp-2">Voice Memos - Project Alpha Brainstorm</h3>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors text-xl" data-icon="play_circle">play_circle</span>
+</div>
+<p class="text-on-surface-variant text-sm mt-1">Local Upload</p>
+</div>
+<div class="flex items-center space-x-4 mt-4 md:mt-0">
+<span class="inline-flex items-center space-x-1 text-xs text-on-surface-variant font-label-caps">
+<span class="material-symbols-outlined text-[16px]" data-icon="schedule">schedule</span>
+<span class="">18:30</span>
+</span>
+<span class="inline-flex items-center space-x-1 text-xs text-on-surface-variant font-label-caps">
+<span class="material-symbols-outlined text-[16px]" data-icon="calendar_today">calendar_today</span>
+<span class="">Oct 20, 2023</span>
+</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-0 w-full z-50 flex justify-around items-center h-16 px-4 bg-surface/40 backdrop-blur-2xl border-t border-white/5 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] md:hidden">
+<!-- Inactive -->
+<a class="flex flex-col items-center p-2 text-on-surface-variant hover:bg-white/5 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+</a>
+<!-- Inactive -->
+<a class="flex flex-col items-center p-2 text-on-surface-variant hover:bg-white/5 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</a>
+<!-- Active Tab: description (Library context) -->
+<a class="flex flex-col items-center p-2 text-primary drop-shadow-[0_0_8px_rgba(83,224,118,0.5)] scale-110 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="description" data-weight="fill" style="font-variation-settings: 'FILL' 1;">description</span>
+</a>
+<!-- Inactive -->
+<a class="flex flex-col items-center p-2 text-on-surface-variant hover:bg-white/5 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+</nav>
+
+
+</body></html>

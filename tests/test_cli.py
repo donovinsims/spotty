@@ -113,3 +113,54 @@ def test_resolve_json_store_includes_episode_id(monkeypatch, store, cfg):
     payload = json.loads(out.getvalue())
     assert payload["episode_id"] is not None
     assert store.get_episode(payload["episode_id"]) is not None
+
+
+def _seed_job_with_segments(tmp_path) -> int:
+    store = cli.Store(str(cli.get_config().db_path))
+    eid = store.upsert_episode(Episode(url="https://x/1",
+                                       title="Ep - Jane Doe - #1", show_name="Show Name"))
+    job = store.create_job(eid)
+    tx_id = store.upsert_transcript(job.id, eid, "en")
+    store.add_segment(job.id, tx_id, 0, 0.0, 2.0, "hello world")
+    store.add_segment(job.id, tx_id, 0, 2.0, 4.0, "goodbye")
+    store.close()
+    return job.id
+
+
+def test_transcript_format_md_to_stdout(tmp_path):
+    job_id = _seed_job_with_segments(tmp_path)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = cli.main(["transcript", str(job_id), "--format", "md"])
+    assert rc == 0
+    body = out.getvalue()
+    assert body.startswith("---")
+    assert 'guest: "Jane Doe"' in body
+    assert "[00:00:00] hello world" in body
+
+
+def test_transcript_bare_output_writes_transcripts_dir(tmp_path):
+    # --output (bare) -> cfg.data_dir/transcripts/<smart name>.md
+    job_id = _seed_job_with_segments(tmp_path)
+    out = io.StringIO()
+    err = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = cli.main(["transcript", str(job_id), "--output"])
+    assert rc == 0
+    data_dir = Path(cli.get_config().data_dir)
+    files = list((data_dir / "transcripts").glob("*"))
+    assert len(files) == 1
+    assert files[0].name == "Show Name - Jane Doe - Ep #1.md"
+    assert "wrote" in err.getvalue()
+
+
+def test_transcript_output_explicit_json_file(tmp_path):
+    job_id = _seed_job_with_segments(tmp_path)
+    target = tmp_path / "out.json"
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        rc = cli.main(["transcript", str(job_id), "--format", "json", "--output", str(target)])
+    assert rc == 0
+    payload = json.loads(target.read_text())
+    assert payload["metadata"]["guest"] == "Jane Doe"
+    assert len(payload["segments"]) == 2

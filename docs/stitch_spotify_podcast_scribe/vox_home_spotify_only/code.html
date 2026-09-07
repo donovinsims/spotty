@@ -1,0 +1,261 @@
+<!DOCTYPE html><html class="dark" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>VOX - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface-variant": "#bccbb9",
+                        "on-tertiary-container": "#383838",
+                        "surface-container-lowest": "#0e0e0e",
+                        "surface": "#131313",
+                        "secondary-fixed-dim": "#00e290",
+                        "on-secondary-fixed-variant": "#005231",
+                        "tertiary": "#c8c6c5",
+                        "on-primary": "#003914",
+                        "primary-fixed-dim": "#53e076",
+                        "secondary-container": "#00ffa3",
+                        "secondary": "#f5fff5",
+                        "primary-fixed": "#72fe8f",
+                        "surface-bright": "#3a3939",
+                        "surface-tint": "#53e076",
+                        "on-error": "#690005",
+                        "error-container": "#93000a",
+                        "on-primary-fixed-variant": "#005320",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#313030",
+                        "surface-container-highest": "#353534",
+                        "surface-container-low": "#1c1b1b",
+                        "on-tertiary": "#313030",
+                        "surface-container": "#201f1f",
+                        "surface-dim": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "tertiary-fixed-dim": "#c8c6c5",
+                        "surface-container-high": "#2a2a2a",
+                        "on-error-container": "#ffdad6",
+                        "primary": "#53e076",
+                        "secondary-fixed": "#52ffac",
+                        "tertiary-fixed": "#e5e2e1",
+                        "outline": "#869585",
+                        "inverse-surface": "#e5e2e1",
+                        "outline-variant": "#3d4a3d",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary-fixed": "#1c1b1b",
+                        "inverse-primary": "#006e2d",
+                        "on-primary-container": "#004118",
+                        "surface-variant": "#353534",
+                        "tertiary-container": "#a3a1a1",
+                        "on-secondary": "#003920",
+                        "on-secondary-fixed": "#002111",
+                        "background": "#131313",
+                        "primary-container": "#1db954",
+                        "on-tertiary-fixed-variant": "#474646",
+                        "on-primary-fixed": "#002108",
+                        "on-secondary-container": "#007146"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-margin": "40px",
+                        "reader-max-width": "800px",
+                        "sidebar-width": "280px",
+                        "gutter-lg": "32px",
+                        "base": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": [
+                            "JetBrains Mono"
+                        ],
+                        "reader-pane": [
+                            "JetBrains Mono"
+                        ],
+                        "display-lg": [
+                            "Inter"
+                        ],
+                        "body-ui": [
+                            "Inter"
+                        ],
+                        "headline-md-mobile": [
+                            "Inter"
+                        ],
+                        "headline-md": [
+                            "Inter"
+                        ]
+                    },
+                    "fontSize": {
+                        "label-caps": [
+                            "12px",
+                            {
+                                "lineHeight": "1",
+                                "letterSpacing": "0.1em",
+                                "fontWeight": "700"
+                            }
+                        ],
+                        "reader-pane": [
+                            "18px",
+                            {
+                                "lineHeight": "1.6",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "400"
+                            }
+                        ],
+                        "display-lg": [
+                            "48px",
+                            {
+                                "lineHeight": "1.1",
+                                "letterSpacing": "0.02em",
+                                "fontWeight": "700"
+                            }
+                        ],
+                        "body-ui": [
+                            "16px",
+                            {
+                                "lineHeight": "1.5",
+                                "fontWeight": "400"
+                            }
+                        ],
+                        "headline-md-mobile": [
+                            "24px",
+                            {
+                                "lineHeight": "1.2",
+                                "fontWeight": "600"
+                            }
+                        ],
+                        "headline-md": [
+                            "32px",
+                            {
+                                "lineHeight": "1.2",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "600"
+                            }
+                        ]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glow-input:focus-within {
+            box-shadow: 0px 0px 30px rgba(29, 185, 84, 0.3);
+            border-color: #1db954;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-ui">
+<!-- TopAppBar -->
+<header class="bg-background/80 dark:bg-background/80 flex justify-between items-center w-full px-container-margin py-4 docked full-width top-0 sticky backdrop-blur-2xl border-b border-white/5 flat no shadows z-50">
+<div class="flex items-center gap-4">
+<button aria-label="Menu" class="text-on-background hover:text-white transition-colors opacity-80">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<span class="font-display-lg text-xl font-bold tracking-widest text-white">VOX</span>
+</div>
+<div class="flex items-center">
+<button aria-label="User Profile" class="text-primary hover:text-primary transition-colors h-8 w-8 rounded-full overflow-hidden border border-white/10">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A futuristic minimalist avatar placeholder featuring a sleek, geometric glowing node against an absolute black background. The node emits a soft, high-key mint green neon light, characteristic of a premium developer tool interface. The style is sharp, precise, and abstract." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTPBFicY0Vy6INeEL62YJ5o1pXnig1-oCPBxCn98H8ZmMZvjxMHB-jbP7tMIrLVgYhTqNMQRwayfd44jOfNqhnXaaPNFtXyvlTvFHPU6s3fpvEqjzQrKC9v8yReAi_9StAct1V8wyIUJ6Qyru41fu6XZ_VIkSDxyNTwpNNdb0HNXDJhy9NNWNwGPS6Gn5mLgy4FWoWrOv_kxcDGvOL3jIljBtLFMk96vLhjNn9jGZ3UIeiS4x3dBS0SA">
+</button>
+</div>
+</header>
+<!-- Navigation Drawer (Desktop Hidden, shown for structure if needed) -->
+<aside class="fixed inset-y-0 left-0 w-sidebar-width bg-background/95 dark:bg-background/95 backdrop-blur-3xl border-r border-white/5 shadow-2xl flex flex-col p-6 space-y-4 z-40 transform -translate-x-full md:translate-x-0 transition-transform duration-300 hidden md:flex">
+<div class="flex items-center gap-4 mb-8">
+<div class="h-10 w-10 rounded-full overflow-hidden border border-white/10">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A futuristic minimalist avatar placeholder featuring a sleek, geometric glowing node against an absolute black background. The node emits a soft, high-key mint green neon light, characteristic of a premium developer tool interface. The style is sharp, precise, and abstract." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLaot-b0egAd0_ZEoZI7La2uBaHjw62EEXbzjRfqFmfjLsgR-YOYdbAVbpbdFMFg7HoIUaWj6X8S7hmi2VbsAAggCk-tJnhQorARBvYO-5pAVJ0Xar7lkh7z4BNRYVkOgs9oAxWcDRvfkiOYn82L9foCqtrb2bxuLObvgnadN3QfDzeS0ma_kE61iK4UhpTKXBx2v3OE2bzup2-l2C2D01_WCKReduHDMkYih7YNW_UAqRGMbHRaIcGg">
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-background">Power User</p>
+<p class="font-label-caps text-[10px] text-primary-container">Pro Plan</p>
+<p class="font-label-caps text-[10px] text-on-surface-variant mt-1">24h Remaining</p>
+</div>
+</div>
+<nav class="flex-1 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+                Library
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+                Drafts
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="ios_share">ios_share</span>
+                Exported
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-container-high transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+                History
+            </a>
+</nav>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col items-center justify-center p-4 md:pl-[320px] relative z-10 w-full max-w-5xl mx-auto">
+<div class="text-center mb-12 max-w-3xl">
+<div class="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-8 backdrop-blur-xl">
+<span class="font-body-ui text-sm text-on-background">Introducing VOX Spotify Transcripts</span>
+<span class="material-symbols-outlined text-primary-container text-sm" data-icon="arrow_forward">arrow_forward</span>
+</div>
+<h1 class="font-display-lg text-5xl md:text-6xl mb-6 tracking-wide leading-tight text-white font-semibold">
+                Extract Spotify Transcripts Instantly
+            </h1>
+<p class="font-body-ui text-lg text-on-surface-variant max-w-2xl mx-auto tracking-wide">
+                Turn any Spotify podcast into text. Extract transcripts, generate AI summaries, and chat with episodes effortlessly.
+            </p>
+</div>
+<div class="w-full max-w-2xl mx-auto relative">
+<div class="absolute inset-0 bg-primary-container/10 blur-[100px] rounded-full pointer-events-none"></div>
+<!-- Input Area -->
+<div class="relative w-full mb-6 glow-input rounded-2xl transition-all duration-500 border border-white/10 bg-surface-container-lowest/80 backdrop-blur-xl shadow-2xl overflow-hidden h-16"><div class="flex items-center overflow-hidden h-full">
+  <span class="material-symbols-outlined text-on-surface-variant ml-4 mr-2 shrink-0" data-icon="link">link</span>
+  <input class="flex-1 bg-transparent border-none text-white font-body-ui text-lg focus:ring-0 placeholder:text-on-surface-variant/40 px-2 h-full text-xl" placeholder="Paste a Spotify episode URL..." type="text">
+  
+</div></div><button class="w-full bg-primary-container hover:bg-primary-container/90 text-background font-label-caps text-sm py-4 rounded-full flex items-center justify-center gap-2 transition-all shadow-lg group mt-2">
+    <span class="">PROCESS TRANSCRIPT</span>
+    <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<p class="font-label-caps text-[11px] text-center text-on-surface-variant/40 mt-6 tracking-widest">
+                HTTPS://OPEN.SPOTIFY.COM/EPISODE/...
+            </p>
+</div>
+</main>
+<!-- BottomNavBar (Mobile only) -->
+<nav class="md:hidden bg-surface-container-lowest/60 dark:bg-surface-container-lowest/60 flex justify-around items-center h-20 px-4 fixed bottom-0 w-full z-50 backdrop-blur-2xl border-t border-white/5 pb-safe">
+<a class="flex flex-col items-center justify-center w-full h-full text-primary-container drop-shadow-[0_0_12px_rgba(29,185,84,0.4)] font-body-ui text-body-ui hover:bg-white/5 scale-110 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="home" data-weight="fill" style="font-variation-settings: 'FILL' 1;">home</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant font-body-ui text-body-ui hover:bg-white/5 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant font-body-ui text-body-ui hover:bg-white/5 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant font-body-ui text-body-ui hover:bg-white/5 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+</nav>
+
+
+
+
+
+
+
+
+</body></html>

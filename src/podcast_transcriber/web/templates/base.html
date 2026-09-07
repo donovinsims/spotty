@@ -15,6 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..700,0..1,-50..200">
   <link rel="stylesheet" href="/static/style.css">
   <!-- Process swapped-in fragments immediately. With default 20ms
   settle delay, tap on freshly swapped form can outrun htmx's
@@ -42,21 +43,29 @@
 
   {% if request and not request.url.path.startswith("/login") %}
   <aside class="sidebar" id="sidebar" aria-label="Primary">
-    <a class="brand label-caps" href="/" style="color: var(--primary)">SPOTTY</a>
-    <ul>
-      <li>
-        <a class="sidebar-nav-item{% if request.url.path == "/" %} active{% endif %}" href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-          <span>New</span>
-        </a>
-      </li>
-      <li>
-        <a class="sidebar-nav-item{% if request.url.path.startswith("/jobs") %} active{% endif %}" href="/jobs" {% if request.url.path.startswith("/jobs") %}aria-current="page"{% endif %}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-          <span>Jobs</span>
-        </a>
-      </li>
-    </ul>
+    <a class="brand" href="/">SPOTTY</a>
+    <nav aria-label="Primary">
+      <ul>
+        <li>
+          <a class="sidebar-nav-item{% if request.url.path == "/" %} active{% endif %}" href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
+            <span class="mat-icon" aria-hidden="true">home</span>
+            <span>Home</span>
+          </a>
+        </li>
+        <li>
+          <a class="sidebar-nav-item{% if request.url.path == "/" %} active{% endif %}" href="/#search" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
+            <span class="mat-icon" aria-hidden="true">search</span>
+            <span>Search</span>
+          </a>
+        </li>
+        <li>
+          <a class="sidebar-nav-item{% if request.url.path.startswith("/jobs") %} active{% endif %}" href="/jobs" {% if request.url.path.startswith("/jobs") %}aria-current="page"{% endif %}>
+            <span class="mat-icon" aria-hidden="true">library_music</span>
+            <span>Library</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
     {% if auth_enabled %}
     <form method="post" action="/logout" class="sidebar-signout">
       <button class="btn btn-ghost btn-small">Sign out</button>
@@ -68,10 +77,18 @@
   <header class="topbar glass">
     {% if request and not request.url.path.startswith("/login") %}
     <button class="btn-icon" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Toggle navigation">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      <span class="mat-icon" aria-hidden="true">menu</span>
     </button>
     {% endif %}
     <a class="brand" href="/">SPOTTY</a>
+    <nav class="topnav" aria-label="Primary">
+      <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
+        <span class="mat-icon" aria-hidden="true">home</span><span>Home</span>
+      </a>
+      <a href="/jobs" {% if request.url.path.startswith("/jobs") %}aria-current="page"{% endif %}>
+        <span class="mat-icon" aria-hidden="true">library_music</span><span>Library</span>
+      </a>
+    </nav>
     {% if auth_enabled %}
     <form method="post" action="/logout">
       <button class="btn btn-ghost btn-small">Sign out</button>
@@ -86,14 +103,18 @@
   </div>
 
   {% if request and not request.url.path.startswith("/login") %}
-  <nav class="tabbar" aria-label="Primary">
+  <nav class="tabbar glass" aria-label="Primary">
     <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      <span>New</span>
+      <span class="mat-icon" aria-hidden="true">home</span>
+      <span>Home</span>
+    </a>
+    <a href="/#search" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
+      <span class="mat-icon" aria-hidden="true">search</span>
+      <span>Search</span>
     </a>
     <a href="/jobs" {% if request.url.path.startswith("/jobs") %}aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-      <span>Jobs</span>
+      <span class="mat-icon" aria-hidden="true">library_music</span>
+      <span>Library</span>
     </a>
   </nav>
   {% endif %}
@@ -116,6 +137,14 @@
         sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
       });
     }
+    // Escape closes the mobile drawer (keyboard users).
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && document.body.classList.contains("sidebar-open")) {
+        document.body.classList.remove("sidebar-open");
+        var t = document.getElementById("sidebar-toggle");
+        if (t) t.setAttribute("aria-expanded", "false");
+      }
+    });
   </script>
 </body>
 </html>

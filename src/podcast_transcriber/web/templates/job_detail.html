@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Job {{ job.id }}{% endblock %}
 {% block content %}
-<a class="back" href="/jobs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All jobs</a>
+<a class="back" href="/jobs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All jobs</a>
 <h1>{{ episode.title if episode and episode.title else "Untitled episode" }}</h1>
 <p class="label-caps muted">Job {{ job.id }}</p>
 
@@ -9,7 +9,9 @@
 
 {% set band = ["band-green", "band-mint", "band-surface"] %}
 <article class="card card-split episode-card">
-  <div class="card-header {{ band[(job.id|int) % 3] }}">{{ episode.show_name if episode and episode.show_name else "Episode" }}{% if episode and episode.publisher %} · {{ episode.publisher }}{% endif %}</div>
+  <div class="card-header {{ band[(job.id|int) % 3] }}">
+    {{ episode.show_name if episode and episode.show_name else "Episode" }}{% if episode and episode.publisher %} · {{ episode.publisher }}{% endif %}
+  </div>
   <div class="card-body">
     <dl class="meta">
       <div>

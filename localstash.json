@@ -1,0 +1,11 @@
+{
+  "name": "spotty",
+  "host": "spotty",
+  "processes": [
+    {
+      "name": "app",
+      "cmd": ".venv/bin/pt serve --port $PORT",
+      "primary": true
+    }
+  ]
+}

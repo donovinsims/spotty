@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
+from . import export as export_mod
 from .config import get_config, is_loopback_host
 from .doctor import run_checks
 from .download import DownloadError, download_episode
@@ -93,7 +94,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     tr = sub.add_parser("transcript", help="print the transcript of a job")
     tr.add_argument("job_id", type=int)
-    tr.add_argument("--json", action="store_true")
+    tr.add_argument("--json", action="store_true",
+                    help="legacy: raw segment array as JSON on stdout")
+    tr.add_argument("--format", choices=["txt", "md", "json", "srt"], default=None,
+                    help="output format (default: txt on stdout, md when writing a file)")
+    tr.add_argument("--output", nargs="?", const="__default_dir__", default=None,
+                    metavar="PATH",
+                    help="write to a file instead of stdout. A directory (or a bare "
+                         "--output) writes data/transcripts/<Show - Guest - Episode>.<ext>; "
+                         "a full path writes exactly there.")
 
     sr = sub.add_parser("search", help="search episodes")
     sr.add_argument("query")
@@ -273,12 +282,49 @@ def cmd_transcript(args, store: Store, cfg) -> int:
     if not segs:
         print(f"no transcript for job {args.job_id}")
         return 0
-    if args.json:
+    if args.json:  # legacy behaviour: raw segment array on stdout
         print(json.dumps(segs, indent=2, default=str))
         return 0
-    print(f"# transcript for job {args.job_id}")
-    for s in segs:
-        print(f"[{s['start_time']:7.1f} -> {s['end_time']:7.1f}] {s['text']}")
+    job = store.get_job(args.job_id)
+    episode = store.get_episode(job.episode_id) if job and job.episode_id is not None else None
+    tx = store.get_transcript(args.job_id)
+
+    fmt = args.format or ("md" if args.output is not None else "txt")
+    if fmt == "md":
+        body = export_mod.transcript_to_markdown(episode, job, tx, segs)
+    elif fmt == "json":
+        body = json.dumps(export_mod.transcript_to_json(episode, job, tx, segs),
+                          indent=2, default=str)
+    elif fmt == "srt":
+        body = export_mod.transcript_to_srt(segs)
+    else:
+        body = export_mod.transcript_to_txt(episode, job, segs)
+
+    if args.output is None:
+        try:
+            print(body, end="" if body.endswith("\n") else "\n")
+        except BrokenPipeError:
+            # downstream consumer (e.g. `pt transcript 24 --format md | agent`)
+            # closed the pipe early; exit quietly like most Unix tools.
+            sys.stderr.close()
+            return 0
+        return 0
+
+    if args.output == "__default_dir__":
+        out_dir = (cfg.data_dir / "transcripts") if cfg else Path("data/transcripts")
+    else:
+        out_dir = Path(args.output)
+    ext = "json" if fmt == "json" else fmt
+    if out_dir.is_dir() or str(args.output).endswith(("/", "\\")):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        name = (export_mod.build_transcript_filename(episode, ext, job_id=args.job_id)
+                if episode else f"transcript-{args.job_id}.{ext}")
+        out_path = out_dir / name
+    else:
+        out_path = out_dir
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(body, encoding="utf-8")
+    print(f"wrote {out_path}", file=sys.stderr)
     return 0
 
 

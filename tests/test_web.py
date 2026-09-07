@@ -238,19 +238,32 @@ def test_post_jobs_happy_path_runs_worker(store, tmp_path):
         assert "Hello world this is a test podcast." in tx.text
         assert "00:00" in tx.text
 
-        # download .txt
+        # download .txt (default) keeps old plain-text shape
         dl = client.get(f"/jobs/{job_id}/transcript/download")
         assert dl.status_code == 200
         assert dl.headers["content-type"].startswith("text/plain")
-        assert "transcript-" in dl.headers["content-disposition"]
+        assert "Test Show - My Test Episode.txt" in dl.headers["content-disposition"]
         assert "[00:00:00] Hello world this is a test podcast." in dl.text
         assert "Title: My Test Episode" in dl.text
 
-        # download .srt
+        # download .md / .json carry smart filenames too
+        md = client.get(f"/jobs/{job_id}/transcript/download", params={"format": "md"})
+        assert md.status_code == 200
+        assert 'show: "Test Show"' in md.text
+        assert "Test Show - My Test Episode.md" in md.headers["content-disposition"]
+        js = client.get(f"/jobs/{job_id}/transcript/download", params={"format": "json"})
+        assert js.status_code == 200
+        assert "My Test Episode" in js.text
+        assert "Test Show - My Test Episode.json" in js.headers["content-disposition"]
+        bad = client.get(f"/jobs/{job_id}/transcript/download", params={"format": "docx"})
+        assert bad.status_code == 200 and "Title: My Test Episode" in bad.text  # falls back to txt
+
+        # download .srt keeps subtitle body, gets a smart filename
         srt = client.get(f"/jobs/{job_id}/transcript/srt")
         assert srt.status_code == 200
         assert "-->" in srt.text
         assert "00:00:04,000" in srt.text
+        assert "Test Show - My Test Episode.srt" in srt.headers["content-disposition"]
 
         # search within transcript highlights matches
         sr = client.post(f"/jobs/{job_id}/transcript/search", data={"q": "software"})

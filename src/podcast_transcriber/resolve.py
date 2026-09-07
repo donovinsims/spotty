@@ -37,6 +37,8 @@ SPOTIFY_EPISODE_RE = re.compile(
 )
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 SPOTIFY_PAGE_URL = "https://open.spotify.com/episode/{id}"
+SPOTIFY_EMBED_EPISODE_URL = "https://open.spotify.com/embed/episode/{id}"
+SPOTIFY_EMBED_SHOW_URL = "https://open.spotify.com/embed/show/{id}"
 
 BROWSER_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -136,10 +138,11 @@ class SpotifyMeta:
 # --------------------------------------------------------------------------- #
 # Spotify public metadata (no auth).  Primary source: the embed/episode page
 # which serves a __NEXT_DATA__ entity {name/title, subtitle (=show name),
-# duration (ms)}.  Fallbacks: main-page og tags and the oEmbed title.
+# duration (ms)}.  Fallbacks: show embed page (for episode IDs that map to
+# shows), main-page og tags and the oEmbed title.
 # --------------------------------------------------------------------------- #
-def _find_entity(data: Any) -> Optional[Dict[str, Any]]:
-    """Locate the episode entity dict inside __NEXT_DATA__."""
+def _find_entity_episode_embed(data: Any) -> Optional[Dict[str, Any]]:
+    """Locate the episode entity dict inside __NEXT_DATA__ for episode embed pages."""
 
     def _walk(obj: Any):
         if isinstance(obj, dict):
@@ -161,8 +164,28 @@ def _find_entity(data: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _parse_spotify_html(html: str) -> Dict[str, Optional[str]]:
-    """Best-effort extraction of episode title / show name / duration (seconds)."""
+def _find_entity_show_embed(data: Any) -> Optional[Dict[str, Any]]:
+    """Locate the episode entity dict inside __NEXT_DATA__ for show embed pages.
+
+    Show embed pages have a different structure:
+    props.pageProps.state.data.entity (type=episode)
+    """
+    try:
+        page_props = data.get("props", {}).get("pageProps", {})
+        state = page_props.get("state", {})
+        entity = state.get("data", {}).get("entity")
+        if entity and entity.get("type") == "episode":
+            return entity
+    except Exception:
+        pass
+    return None
+
+
+def _parse_spotify_html(html: str, source_type: str) -> Dict[str, Optional[str]]:
+    """Best-effort extraction of episode title / show name / duration (seconds).
+
+    source_type: "episode_embed", "show_embed", or "page"
+    """
     meta: Dict[str, Optional[str]] = {"title": None, "show": None, "duration": None}
 
     next_data = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
@@ -172,7 +195,13 @@ def _parse_spotify_html(html: str) -> Dict[str, Optional[str]]:
         except json.JSONDecodeError:
             data = None
         if data:
-            ent = _find_entity(data)
+            if source_type == "episode_embed":
+                ent = _find_entity_episode_embed(data)
+            elif source_type == "show_embed":
+                ent = _find_entity_show_embed(data)
+            else:
+                ent = _find_entity_episode_embed(data)  # try episode embed logic as fallback
+
             if ent:
                 meta["title"] = ent.get("title") or ent.get("name")
                 meta["show"] = ent.get("subtitle") or (
@@ -196,19 +225,24 @@ def _parse_spotify_html(html: str) -> Dict[str, Optional[str]]:
 
 
 def fetch_spotify_metadata(client: httpx.Client, spotify_id: str) -> SpotifyMeta:
+    # Try sources in order: episode embed -> show embed -> main page
+    # Some "episode" IDs actually map to shows, so we need both embed types.
     sources = [
-        "https://open.spotify.com/embed/episode/{id}",
-        SPOTIFY_PAGE_URL,
+        (SPOTIFY_EMBED_EPISODE_URL, "episode_embed"),
+        (SPOTIFY_EMBED_SHOW_URL, "show_embed"),
+        (SPOTIFY_PAGE_URL, "page"),
     ]
     meta: Dict[str, Optional[str]] = {"title": None, "show": None, "duration": None}
-    for template in sources:
+    for template, source_type in sources:
         url = template.format(id=spotify_id)
         try:
             resp = client.get(url, headers={"User-Agent": BROWSER_UA})
+            if resp.status_code == 404:
+                continue
             resp.raise_for_status()
         except Exception:  # noqa: BLE001 - try the next source
             continue
-        parsed = _parse_spotify_html(resp.text)
+        parsed = _parse_spotify_html(resp.text, source_type)
         for k in ("title", "show", "duration"):
             meta[k] = meta[k] or parsed[k]
         if meta["title"] and meta["show"]:
@@ -216,6 +250,7 @@ def fetch_spotify_metadata(client: httpx.Client, spotify_id: str) -> SpotifyMeta
 
     if not meta["title"]:
         # oEmbed: returns JSON {title: ...} without needing page scraping.
+        # Works for shows, not episodes.
         try:
             resp = client.get(
                 "https://open.spotify.com/oembed",

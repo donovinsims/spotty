@@ -99,6 +99,7 @@ class Config:
         self.db_path = self.data_dir / "podcast_transcriber.db"
         self.audio_dir = self.data_dir / "audio"
         self.cache_dir = self.data_dir / "cache"
+        self.transcripts_dir = self.data_dir / "transcripts"
         self.top_results = int(
             top_results if top_results is not None else os.getenv(TOP_LISTENERS_ENV, DEFAULT_TOP_RESULTS)
         )
@@ -136,6 +137,7 @@ class Config:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.audio_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.transcripts_dir.mkdir(parents=True, exist_ok=True)
         return self.data_dir
 
 

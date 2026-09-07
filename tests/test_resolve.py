@@ -23,6 +23,16 @@ SPOTIFY_HTML = (
     '</script></head></html>'
 )
 
+# Show embed page structure (for episode IDs that map to shows)
+SPOTIFY_SHOW_EMBED_HTML = (
+    '<html><head>'
+    '<script id="__NEXT_DATA__" type="application/json">'
+    '{"props":{"pageProps":{"state":{"data":{"entity":{'
+    '"type":"episode","name":"Ep #100 - The Great Adventure",'
+    '"subtitle":"The Test Show","durationMs":1800000}}}}}}'
+    '</script></head></html>'
+)
+
 ITUNES_JSON = {
     "resultCount": 1,
     "results": [
@@ -52,10 +62,29 @@ RSS_VALID = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def make_client(spotify_html=SPOTIFY_HTML, itunes=ITUNES_JSON, feed=RSS_VALID):
+    """Create a mock client where all Spotify URLs return the same HTML."""
     def handler(request: httpx.Request) -> httpx.Response:
         host = request.url.host
         if host == "open.spotify.com":
             return httpx.Response(200, text=spotify_html)
+        if host == "itunes.apple.com":
+            return httpx.Response(200, json=itunes)
+        return httpx.Response(200, text=feed)
+
+    return httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+
+
+def make_client_show_embed_fallback(itunes=ITUNES_JSON, feed=RSS_VALID):
+    """Create a mock client where episode embed 404s, show embed works, main page empty."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.host
+        url_str = str(request.url)
+        if host == "open.spotify.com":
+            if "/embed/episode/" in url_str:
+                return httpx.Response(404, text="Not found")
+            if "/embed/show/" in url_str:
+                return httpx.Response(200, text=SPOTIFY_SHOW_EMBED_HTML)
+            return httpx.Response(200, text='<html><head></head></html>')
         if host == "itunes.apple.com":
             return httpx.Response(200, json=itunes)
         return httpx.Response(200, text=feed)
@@ -134,3 +163,15 @@ def test_resolve_no_show_name_unavailable():
     res = resolve.resolve(SPOTIFY_URL, client=client)
     assert res.result.state == UNAVAILABLE
     assert "show name" in res.result.reason
+
+
+def test_resolve_show_embed_fallback():
+    """Episode ID that maps to a show: episode embed 404s, show embed works."""
+    client = make_client_show_embed_fallback()
+    res = resolve.resolve(SPOTIFY_URL, client=client)
+    assert res.result is not None
+    assert res.result.state == VERIFIED
+    assert res.result.audio_url == "https://cdn.test/show/100.mp3"
+    assert res.metadata.show_name == "The Test Show"
+    assert res.metadata.episode_title == "Ep #100 - The Great Adventure"
+    assert res.feed_url == FEED_URL

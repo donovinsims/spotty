@@ -9,14 +9,21 @@
 <div class="job-list" aria-label="Transcription jobs" {% if active %}hx-get="/jobs" hx-trigger="every 10s" hx-select=".job-list" hx-swap="outerHTML"{% endif %}>
   {% for job, episode in rows %}
   <a href="/jobs/{{ job.id }}" class="job-card">
-    <div class="job-title">{{ episode.title if episode else "—" }}</div>
-    <div class="job-meta">
-      <span class="muted">#{{ job.id }}</span>{% if episode and episode.show_name %} · <span class="muted">{{ episode.show_name }}</span>{% endif %} · <span class="label-caps">{{ job.created_at|dt }}</span>
-    </div>
-    <span class="badge badge-{{ job.status|lower }}">{{ job.status|label }}</span>
-    {% if episode and episode.duration_seconds %}
-    <div class="job-duration">{{ (episode.duration_seconds / 60)|round(1) }} min</div>
-    {% endif %}
+    <span class="cover cover-{{ (job.id|int) % 6 }}" aria-hidden="true">
+      <span class="mat-icon">podcasts</span>
+    </span>
+    <span class="job-info">
+      <span class="job-title">{{ episode.title if episode else "—" }}</span>
+      <span class="job-meta muted">
+        #{{ job.id }}{% if episode and episode.show_name %} · {{ episode.show_name }}{% endif %} · {{ job.created_at|dt }}
+      </span>
+      <span class="job-foot">
+        <span class="badge badge-{{ job.status|lower }}">{{ job.status|label }}</span>
+        {% if episode and episode.duration_seconds %}
+        <span class="job-duration">{{ (episode.duration_seconds / 60)|round(1) }} min</span>
+        {% endif %}
+      </span>
+    </span>
   </a>
   {% endfor %}
 </div>

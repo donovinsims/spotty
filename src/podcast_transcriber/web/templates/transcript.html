@@ -2,16 +2,35 @@
 {% block title %}Transcript — Job {{ job.id }}{% endblock %}
 {% block content %}
 <div class="reader-container">
-  <a class="back" href="/jobs/{{ job.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Job {{ job.id }}</a>
+  <a class="back" href="/jobs/{{ job.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Job {{ job.id }}</a>
 
   <div class="transcript-header">
-    <span class="label-caps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>Transcript</span>
+    <span class="label-caps">Transcript</span>
     <h1>{{ episode.title if episode and episode.title else "Transcript" }}</h1>
     <p class="muted">{{ episode.show_name if episode and episode.show_name else "" }}{% if tx %} · {{ tx.segments }} segments{% endif %}</p>
   </div>
 
+  <div class="player glass">
+    <button class="play-btn" type="button" title="Playback coming soon"
+            aria-label="Play episode — coming soon">
+      <span class="mat-icon" aria-hidden="true">play_arrow</span>
+    </button>
+    <div class="player-track">
+      <div class="progress" role="progressbar" aria-label="Playback progress"
+           aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill" style="width: 0%"></div>
+      </div>
+      <div class="player-time">
+        <span>0:00</span>
+        <span>{{ episode.duration_seconds|dur if episode and episode.duration_seconds else "—" }}</span>
+      </div>
+    </div>
+  </div>
+
   <div class="actions">
+    <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download?format=md">Download .md</a>
     <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download">Download .txt</a>
+    <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/download?format=json">Download .json</a>
     <a class="btn btn-ghost" href="/jobs/{{ job.id }}/transcript/srt">Download .srt</a>
   </div>
 

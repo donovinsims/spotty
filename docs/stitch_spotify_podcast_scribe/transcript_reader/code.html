@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Transcript Reader</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#bccbb9",
+                        "on-tertiary-container": "#383838",
+                        "surface-container-lowest": "#0e0e0e",
+                        "surface": "#131313",
+                        "secondary-fixed-dim": "#00e290",
+                        "on-secondary-fixed-variant": "#005231",
+                        "tertiary": "#c8c6c5",
+                        "on-primary": "#003914",
+                        "primary-fixed-dim": "#53e076",
+                        "secondary-container": "#00ffa3",
+                        "secondary": "#f5fff5",
+                        "primary-fixed": "#72fe8f",
+                        "surface-bright": "#3a3939",
+                        "surface-tint": "#53e076",
+                        "on-error": "#690005",
+                        "error-container": "#93000a",
+                        "on-primary-fixed-variant": "#005320",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#313030",
+                        "surface-container-highest": "#353534",
+                        "surface-container-low": "#1c1b1b",
+                        "on-tertiary": "#313030",
+                        "surface-container": "#201f1f",
+                        "surface-dim": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "tertiary-fixed-dim": "#c8c6c5",
+                        "surface-container-high": "#2a2a2a",
+                        "on-error-container": "#ffdad6",
+                        "primary": "#53e076",
+                        "secondary-fixed": "#52ffac",
+                        "tertiary-fixed": "#e5e2e1",
+                        "outline": "#869585",
+                        "inverse-surface": "#e5e2e1",
+                        "outline-variant": "#3d4a3d",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary-fixed": "#1c1b1b",
+                        "inverse-primary": "#006e2d",
+                        "on-primary-container": "#004118",
+                        "surface-variant": "#353534",
+                        "tertiary-container": "#a3a1a1",
+                        "on-secondary": "#003920",
+                        "on-secondary-fixed": "#002111",
+                        "background": "#131313",
+                        "primary-container": "#1db954",
+                        "on-tertiary-fixed-variant": "#474646",
+                        "on-primary-fixed": "#002108",
+                        "on-secondary-container": "#007146"
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.25rem",
+                        lg: "0.5rem",
+                        xl: "0.75rem",
+                        full: "9999px"
+                    },
+                    spacing: {
+                        "container-margin": "40px",
+                        "reader-max-width": "800px",
+                        "sidebar-width": "280px",
+                        "gutter-lg": "32px",
+                        "base": "8px"
+                    },
+                    fontFamily: {
+                        "label-caps": ["JetBrains Mono"],
+                        "reader-pane": ["JetBrains Mono"],
+                        "display-lg": ["Inter"],
+                        "body-ui": ["Inter"],
+                        "headline-md-mobile": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    fontSize: {
+                        "label-caps": ["12px", { lineHeight: "1", letterSpacing: "0.1em", fontWeight: "700" }],
+                        "reader-pane": ["18px", { lineHeight: "1.6", letterSpacing: "-0.01em", fontWeight: "400" }],
+                        "display-lg": ["48px", { lineHeight: "1.1", letterSpacing: "-0.04em", fontWeight: "700" }],
+                        "body-ui": ["16px", { lineHeight: "1.5", fontWeight: "400" }],
+                        "headline-md-mobile": ["24px", { lineHeight: "1.2", fontWeight: "600" }],
+                        "headline-md": ["32px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #050505;
+        }
+        .neon-glow {
+            box-shadow: 0px 0px 15px rgba(29, 185, 84, 0.3);
+        }
+        .active-word {
+            color: #ffffff;
+            border-bottom: 2px solid #53e076;
+            text-shadow: 0 0 8px rgba(83, 224, 118, 0.5);
+        }
+        .inactive-text {
+            color: rgba(167, 167, 167, 0.6);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-on-background font-body-ui h-screen overflow-hidden flex flex-col md:flex-row">
+<!-- Mobile Top App Bar -->
+<header class="md:hidden bg-background/80 dark:bg-background/80 backdrop-blur-xl border-b border-white/5 flex justify-between items-center w-full px-4 py-4 docked full-width top-0 sticky z-40">
+<button aria-label="Menu" class="text-primary hover:text-primary transition-colors opacity-80">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<span class="font-label-caps text-label-caps tracking-tighter text-primary">VOX_TRANSCRIPT</span>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="User avatar profile picture in a sleek cyberpunk style with neon accents, dark background, highly detailed." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8p7HDOyI1aAMXdXxGOtLQrIQiAM1inTjXGZN_DUeRubMeFy9mirpFwzdWi34LnoHKdqWQh-zwT2ol9SFZ02WeKI6mE0H_Rz0i15qI4sfbOz9gr4fjsQlAHx3Trc5HEDRck52EjL3PHWYU-A3ILbJ1pFjHLE-2rDwIXa5SDLIvxqr10d4nPzQGKN_AeNZ9I4nedU_Ae5xhfP1EXVQRJMxldyebQJKrSfwUZReeuIj28MiBLPnTZ-vpFg"/>
+</div>
+</header>
+<!-- Navigation Drawer (Desktop Sidebar / Mobile Drawer) -->
+<aside class="hidden md:flex flex-col p-6 space-y-4 bg-background/95 dark:bg-background/95 backdrop-blur-3xl border-r border-white/5 shadow-2xl fixed inset-y-0 left-0 w-sidebar-width z-50">
+<div class="flex items-center space-x-3 mb-8">
+<div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="User avatar profile picture in a sleek cyberpunk style with neon accents, dark background, highly detailed." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjLglr_EqSXG5WNQzcDaipGIkxshJQIaR7eMUleHpGz7Vxj9Aw9xBtor7IM84I71Gmw5uDHdZUEREOD6uPfNJV4ykXXqL_y9fHzDZAZ_cs4ip0W-zR0V2MSiACcFBFyJ4uCliemevjqRujOn-_4ym5VOtWjeVIS3EYDYhth9J2kUGxDjT7IxB54ah9omZAYbVqSdiJQY8Yo6U-3RAGJTq4DnP2b3quMJwtA7xL170Mut8XQXJ90vNnqg"/>
+</div>
+<div>
+<p class="font-bold text-primary text-sm">Power User</p>
+<p class="text-xs text-on-surface-variant">Pro Plan</p>
+<p class="text-[10px] text-tertiary mt-1">24h Remaining</p>
+</div>
+</div>
+<nav class="flex-1 space-y-2">
+<a class="flex items-center space-x-3 p-3 bg-primary-container text-on-primary-container rounded-lg border-l-4 border-primary translate-x-1 group transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+<span class="font-label-caps text-label-caps">Library</span>
+</a>
+<a class="flex items-center space-x-3 p-3 text-on-surface-variant font-label-caps hover:bg-surface-container-high transition-all rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">edit_note</span>
+<span class="group-hover:text-primary transition-colors">Drafts</span>
+</a>
+<a class="flex items-center space-x-3 p-3 text-on-surface-variant font-label-caps hover:bg-surface-container-high transition-all rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">ios_share</span>
+<span class="group-hover:text-primary transition-colors">Exported</span>
+</a>
+<a class="flex items-center space-x-3 p-3 text-on-surface-variant font-label-caps hover:bg-surface-container-high transition-all rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">history</span>
+<span class="group-hover:text-primary transition-colors">History</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 md:ml-[280px] h-full overflow-y-auto relative pb-24 md:pb-0">
+<!-- Reader Pane -->
+<div class="max-w-reader-max-width mx-auto px-4 md:px-container-margin py-8 md:py-16">
+<header class="mb-12">
+<div class="inline-flex items-center space-x-2 text-primary font-label-caps text-label-caps mb-4">
+<span class="material-symbols-outlined text-sm">podcasts</span>
+<span>EPISODE 42 • THE AI FRONTIER</span>
+</div>
+<h1 class="font-headline-md-mobile md:font-headline-md text-white mb-2">Decoding the Latent Space</h1>
+<p class="text-on-surface-variant text-sm">Lex Fridman Podcast • 2h 15m</p>
+<!-- Audio Player Minimal -->
+<div class="mt-8 bg-surface-container rounded-lg p-4 flex items-center space-x-4 border border-white/5">
+<button class="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-black hover:neon-glow transition-all">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+<div class="flex-1">
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary-container w-1/3"></div>
+</div>
+<div class="flex justify-between mt-2 text-xs text-on-surface-variant font-label-caps">
+<span>12:45</span>
+<span>-2:02:15</span>
+</div>
+</div>
+</div>
+</header>
+<article class="font-reader-pane text-reader-pane space-y-8 pb-32">
+<section class="flex flex-col md:flex-row md:space-x-4 group">
+<div class="md:w-24 text-primary opacity-50 group-hover:opacity-100 transition-opacity mb-2 md:mb-0 text-sm mt-1">
+                        12:45
+                    </div>
+<div class="flex-1 inactive-text">
+<span>Welcome</span> <span>back</span> <span>to</span> <span>the</span> <span>podcast.</span> <span>Today</span> <span>we're</span> <span>diving</span> <span>deep</span> <span>into</span> <span>the</span> <span>mechanics</span> <span>of</span> <span class="active-word">neural</span> <span class="text-white">networks</span> <span>and</span> <span>how</span> <span>they</span> <span>process</span> <span>high-dimensional</span> <span>data.</span>
+</div>
+</section>
+<section class="flex flex-col md:flex-row md:space-x-4 group">
+<div class="md:w-24 text-primary opacity-50 group-hover:opacity-100 transition-opacity mb-2 md:mb-0 text-sm mt-1">
+                        12:58
+                    </div>
+<div class="flex-1 inactive-text">
+<span>The</span> <span>fascinating</span> <span>thing</span> <span>about</span> <span>the</span> <span>latent</span> <span>space</span> <span>is</span> <span>that</span> <span>it's</span> <span>not</span> <span>just</span> <span>a</span> <span>mathematical</span> <span>abstraction;</span> <span>it's</span> <span>a</span> <span>geometric</span> <span>representation</span> <span>of</span> <span>semantic</span> <span>meaning.</span> <span>When</span> <span>we</span> <span>navigate</span> <span>it,</span> <span>we're</span> <span>essentially</span> <span>walking</span> <span>through</span> <span>concepts.</span>
+</div>
+</section>
+<section class="flex flex-col md:flex-row md:space-x-4 group">
+<div class="md:w-24 text-primary opacity-50 group-hover:opacity-100 transition-opacity mb-2 md:mb-0 text-sm mt-1">
+                        13:15
+                    </div>
+<div class="flex-1 inactive-text">
+<span>Exactly.</span> <span>And</span> <span>if</span> <span>you</span> <span>think</span> <span>about</span> <span>it</span> <span>from</span> <span>a</span> <span>generative</span> <span>perspective,</span> <span>sampling</span> <span>from</span> <span>this</span> <span>space</span> <span>allows</span> <span>us</span> <span>to</span> <span>synthesize</span> <span>entirely</span> <span>new</span> <span>combinations</span> <span>that</span> <span>are</span> <span>coherent</span> <span>yet</span> <span>novel.</span> <span>It's</span> <span>like</span> <span>discovering</span> <span>uncharted</span> <span>territory</span> <span>in</span> <span>the</span> <span>realm</span> <span>of</span> <span>ideas.</span>
+</div>
+</section>
+</article>
+</div>
+<!-- Floating Action Button (Desktop Only contextually) -->
+<div class="hidden md:flex fixed bottom-8 right-8 space-x-4">
+<button class="bg-surface border border-white/10 text-white px-6 py-3 rounded-lg hover:bg-white/10 transition-colors flex items-center space-x-2 backdrop-blur-md">
+<span class="material-symbols-outlined text-sm">ios_share</span>
+<span class="font-label-caps text-label-caps">SHARE</span>
+</button>
+<button class="bg-primary text-black px-6 py-3 rounded-lg hover:neon-glow transition-all flex items-center space-x-2 font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-sm">download</span>
+<span>EXPORT</span>
+</button>
+</div>
+</main>
+<!-- Mobile Bottom Nav Bar -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface/40 dark:bg-surface/40 backdrop-blur-2xl border-t border-white/5 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] flex justify-around items-center h-16 px-4">
+<a class="text-on-surface-variant hover:bg-white/5 p-2 rounded-full transition-all scale-110 duration-300 ease-out flex flex-col items-center" href="#">
+<span class="material-symbols-outlined">home</span>
+</a>
+<a class="text-on-surface-variant hover:bg-white/5 p-2 rounded-full transition-all scale-110 duration-300 ease-out flex flex-col items-center" href="#">
+<span class="material-symbols-outlined">search</span>
+</a>
+<a class="text-primary drop-shadow-[0_0_8px_rgba(83,224,118,0.5)] hover:bg-white/5 p-2 rounded-full transition-all scale-110 duration-300 ease-out flex flex-col items-center" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">description</span>
+</a>
+<a class="text-on-surface-variant hover:bg-white/5 p-2 rounded-full transition-all scale-110 duration-300 ease-out flex flex-col items-center" href="#">
+<span class="material-symbols-outlined">settings</span>
+</a>
+</nav>
+</body></html>
