@@ -1,7 +1,10 @@
 <section id="submit-area" class="home-hero">
-  <h1 class="hero-title">Transcribe <em>Spotify</em> episode</h1>
-  <p class="hero-subtitle">Paste an episode URL and we resolve it, download the audio,
-    and transcribe it locally with MLX Whisper — nothing leaves this machine.</p>
+  <span class="hero-pill">Introducing Spotty podcast transcripts
+    <span class="mat-icon" aria-hidden="true">arrow_forward</span>
+  </span>
+  <h1 class="hero-title">Extract Spotify transcripts <em>instantly</em></h1>
+  <p class="hero-subtitle">Paste a Spotify episode URL below — we download the audio and
+    transcribe it locally with MLX Whisper. Nothing leaves this machine.</p>
 
   <!-- method/action = native fallback for any submit htmx misses: plain
        POST to /jobs creates job (or shows error on the full page)
@@ -17,13 +20,13 @@
     <div class="hero-input">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
       <input id="url" name="url" type="url" required
-             placeholder="https://open.spotify.com/episode/…"
+             placeholder="Paste a Spotify episode URL…"
              value="{{ submitted_url or '' }}">
     </div>
-    <button type="submit" class="process-btn">PROCESS TRANSCRIPT
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    <button type="submit" class="hero-cta">PROCESS TRANSCRIPT
+      <span class="mat-icon" aria-hidden="true">arrow_forward</span>
     </button>
-    <p class="muted">HTTPS://OPEN.SPOTIFY.COM/EPISODE/…</p>
+    <p class="hero-caption">HTTPS://OPEN.SPOTIFY.COM/EPISODE/…</p>
     <div id="submit-indicator" class="muted htmx-indicator" role="status">Resolving episode…</div>
   </form>
 

@@ -9,39 +9,40 @@
     {% if view.chunks_total > 0 %}
     <div class="status-ring-wrap">
       <div class="ring-cluster">
-        <svg class="status-ring" viewBox="0 0 120 120" role="progressbar"
+        <svg class="status-ring" viewBox="0 0 36 36" role="progressbar"
              aria-label="Transcription progress"
              aria-valuenow="{{ view.chunks_done }}"
              aria-valuemin="0" aria-valuemax="{{ view.chunks_total }}">
-          <circle class="ring-track" cx="60" cy="60" r="52"></circle>
-          <circle class="ring-fill" cx="60" cy="60" r="52"
-                  style="stroke-dashoffset: {{ ((100 - view.progress_pct) * 3.267)|round(1) }}"></circle>
+          <path class="ring-track" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+          <path class="ring-fill" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                stroke-dasharray="{{ view.progress_pct }}, 100"></path>
         </svg>
         <div class="ring-label">
-          <span class="pct">{{ view.progress_pct }}%</span>
-          <span class="label-caps">{{ view.chunks_done }} of {{ view.chunks_total }}</span>
+          <span class="pct">{{ view.progress_pct }}<span class="pct-unit">%</span></span>
+          <span class="ring-caption">{{ view.chunks_done }} of {{ view.chunks_total }}</span>
         </div>
       </div>
-    </div>
 
-    <ol class="stepper" aria-label="Transcription steps">
-      <li class="step{% if view.phase > 0 %} done{% elif view.phase == 0 %} active{% endif %}">
-        <span class="step-dot"><span class="num">1</span></span>
-        <span class="step-label">Download</span>
-      </li>
-      <li class="step{% if view.phase > 1 %} done{% elif view.phase == 1 %} active{% endif %}">
-        <span class="step-dot"><span class="num">2</span></span>
-        <span class="step-label">Chunk</span>
-      </li>
-      <li class="step{% if view.phase > 2 %} done{% elif view.phase == 2 %} active{% endif %}">
-        <span class="step-dot"><span class="num">3</span></span>
-        <span class="step-label">Transcribe</span>
-      </li>
-      <li class="step{% if view.phase > 3 %} done{% elif view.phase == 3 %} active{% endif %}">
-        <span class="step-dot"><span class="num">4</span></span>
-        <span class="step-label">Verify</span>
-      </li>
-    </ol>
+      <div class="stepper-panel">
+        <h2 class="stepper-heading">Transcription Status</h2>
+        <ol class="stepper" aria-label="Transcription steps">
+          {% set steps = [
+            ("Download", 0), ("Chunk", 1), ("Transcribe", 2), ("Verify", 3)
+          ] %}
+          {% for label, phase in steps %}
+          <li class="step{% if view.phase > phase %} done{% elif view.phase == phase %} active{% else %} pending{% endif %}">
+            <span class="step-dot" aria-hidden="true">
+              {% if view.phase > phase %}<span class="mat-icon">check</span>{% endif %}
+            </span>
+            <span class="step-body">
+              <span class="step-index">Step {{ loop.index }}</span>
+              <span class="step-label">{{ label }}</span>
+            </span>
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+    </div>
 
     <div class="progress" role="progressbar" aria-label="Transcription progress"
          aria-valuenow="{{ view.chunks_done }}"
@@ -49,6 +50,7 @@
       <div class="progress-fill" style="width: {{ view.progress_pct }}%"></div>
     </div>
     <p class="muted progress-line">{{ view.progress_pct }}% done ({{ view.chunks_done }} of {{ view.chunks_total }} parts)</p>
+    <p class="status-privacy"><span class="mat-icon" aria-hidden="true">lock</span><span>Processed end-to-end on this device</span></p>
     {% else %}
     <p class="label-caps active-word">PROCESSING</p>
     <p class="muted">Downloading audio — progress appears once chunking starts…</p>

@@ -13,15 +13,21 @@
       <span class="mat-icon">podcasts</span>
     </span>
     <span class="job-info">
-      <span class="job-title">{{ episode.title if episode else "—" }}</span>
+      <span class="job-title-row">
+        <span class="job-title">{{ episode.title if episode else "—" }}</span>
+        <span class="mat-icon" aria-hidden="true">play_circle</span>
+      </span>
       <span class="job-meta muted">
-        #{{ job.id }}{% if episode and episode.show_name %} · {{ episode.show_name }}{% endif %} · {{ job.created_at|dt }}
+        #{{ job.id }}{% if episode and episode.show_name %} · {{ episode.show_name }}{% endif %}
       </span>
       <span class="job-foot">
+        <span class="job-meta-icons">
+          {% if episode and episode.duration_seconds %}
+          <span><span class="mat-icon" aria-hidden="true">schedule</span>{{ (episode.duration_seconds / 60)|round(0)|int }}:{{ "%02d"|format(episode.duration_seconds % 60) }}</span>
+          {% endif %}
+          <span><span class="mat-icon" aria-hidden="true">calendar_today</span>{{ job.created_at|dt }}</span>
+        </span>
         <span class="badge badge-{{ job.status|lower }}">{{ job.status|label }}</span>
-        {% if episode and episode.duration_seconds %}
-        <span class="job-duration">{{ (episode.duration_seconds / 60)|round(1) }} min</span>
-        {% endif %}
       </span>
     </span>
   </a>

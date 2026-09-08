@@ -5,12 +5,19 @@
   <a class="back" href="/jobs/{{ job.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Job {{ job.id }}</a>
 
   <div class="transcript-header">
-    <span class="label-caps">Transcript</span>
+    <p class="transcript-tag">
+      <span class="mat-icon" aria-hidden="true">podcasts</span>
+      <span>Episode {{ job.id }}{% if episode and episode.show_name %} • {{ episode.show_name|upper }}{% endif %}</span>
+    </p>
     <h1>{{ episode.title if episode and episode.title else "Transcript" }}</h1>
-    <p class="muted">{{ episode.show_name if episode and episode.show_name else "" }}{% if tx %} · {{ tx.segments }} segments{% endif %}</p>
+    <p class="transcript-sub">
+      {{- episode.show_name if episode and episode.show_name else "" -}}
+      {%- if episode and episode.duration_seconds %} · {{ episode.duration_seconds|dur }}{% endif -%}
+      {%- if tx %} · {{ tx.segments }} segments{% endif -%}
+    </p>
   </div>
 
-  <div class="player glass">
+  <div class="player">
     <button class="play-btn" type="button" title="Playback coming soon"
             aria-label="Play episode — coming soon">
       <span class="mat-icon" aria-hidden="true">play_arrow</span>
@@ -49,8 +56,8 @@
   {% if segments %}
   <div class="transcript">
     {% for seg in segments %}
-    <div class="seg" id="seg-{{ loop.index0 }}">
-      <span class="ts label-caps">{{ seg.start_time|ts }}</span>
+    <div class="seg-row" id="seg-{{ loop.index0 }}">
+      <span class="ts"><a href="#seg-{{ loop.index0 }}">{{ seg.start_time|ts }}</a></span>
       <span class="seg-text">{{ seg.text }}</span>
     </div>
     {% endfor %}

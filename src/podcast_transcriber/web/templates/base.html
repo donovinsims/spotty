@@ -43,7 +43,13 @@
 
   {% if request and not request.url.path.startswith("/login") %}
   <aside class="sidebar" id="sidebar" aria-label="Primary">
-    <a class="brand" href="/">SPOTTY</a>
+    <div class="profile">
+      <span class="avatar avatar-lg" aria-hidden="true"><span class="mat-icon">person</span></span>
+      <div>
+        <div class="profile-name">Spotty Local</div>
+        <div class="profile-sub">On-device transcription</div>
+      </div>
+    </div>
     <nav aria-label="Primary">
       <ul>
         <li>
@@ -89,6 +95,7 @@
         <span class="mat-icon" aria-hidden="true">library_music</span><span>Library</span>
       </a>
     </nav>
+    <span class="avatar avatar-sm" aria-hidden="true"><span class="mat-icon">person</span></span>
     {% if auth_enabled %}
     <form method="post" action="/logout">
       <button class="btn btn-ghost btn-small">Sign out</button>
