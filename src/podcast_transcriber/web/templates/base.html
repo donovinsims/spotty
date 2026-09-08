@@ -41,51 +41,7 @@
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
 
-  {% if request and not request.url.path.startswith("/login") %}
-  <aside class="sidebar" id="sidebar" aria-label="Primary">
-    <div class="profile">
-      <span class="avatar avatar-lg" aria-hidden="true"><span class="mat-icon">person</span></span>
-      <div>
-        <div class="profile-name">Spotty Local</div>
-        <div class="profile-sub">On-device transcription</div>
-      </div>
-    </div>
-    <nav aria-label="Primary">
-      <ul>
-        <li>
-          <a class="sidebar-nav-item{% if request.url.path == "/" %} active{% endif %}" href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
-            <span class="mat-icon" aria-hidden="true">home</span>
-            <span>Home</span>
-          </a>
-        </li>
-        <li>
-          <a class="sidebar-nav-item{% if request.url.path == "/" %} active{% endif %}" href="/#search" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
-            <span class="mat-icon" aria-hidden="true">search</span>
-            <span>Search</span>
-          </a>
-        </li>
-        <li>
-          <a class="sidebar-nav-item{% if request.url.path.startswith("/jobs") %} active{% endif %}" href="/jobs" {% if request.url.path.startswith("/jobs") %}aria-current="page"{% endif %}>
-            <span class="mat-icon" aria-hidden="true">library_music</span>
-            <span>Library</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
-    {% if auth_enabled %}
-    <form method="post" action="/logout" class="sidebar-signout">
-      <button class="btn btn-ghost btn-small">Sign out</button>
-    </form>
-    {% endif %}
-  </aside>
-  {% endif %}
-
   <header class="topbar glass">
-    {% if request and not request.url.path.startswith("/login") %}
-    <button class="btn-icon" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="mat-icon" aria-hidden="true">menu</span>
-    </button>
-    {% endif %}
     <a class="brand" href="/">SPOTTY</a>
     <nav class="topnav" aria-label="Primary">
       <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>
@@ -134,24 +90,5 @@
     {% endif %}
   </footer>
 
-  <script>
-    // Sidebar drawer toggle — mobile hamburger (topbar). Drawer state lives
-    // on body.sidebar-open; desktop keeps the rail open via CSS.
-    var sidebarToggle = document.getElementById("sidebar-toggle");
-    if (sidebarToggle) {
-      sidebarToggle.addEventListener("click", function () {
-        var open = document.body.classList.toggle("sidebar-open");
-        sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
-      });
-    }
-    // Escape closes the mobile drawer (keyboard users).
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && document.body.classList.contains("sidebar-open")) {
-        document.body.classList.remove("sidebar-open");
-        var t = document.getElementById("sidebar-toggle");
-        if (t) t.setAttribute("aria-expanded", "false");
-      }
-    });
-  </script>
 </body>
 </html>

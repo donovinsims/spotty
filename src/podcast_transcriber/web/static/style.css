@@ -7,9 +7,7 @@
    is luminance + blur, never drop shadows. 8px spacing baseline; buttons are
    9999px pills.
 
-   Mobile-first: single column, bottom tab bar <=560px / standalone, sidebar
-   becomes a drawer via body.sidebar-open; >=768px the sidebar becomes a fixed
-   rail and the top navigation appears.
+   Mobile-first: single column, bottom tab bar <=560px / standalone.
 
    Preserved behavior (do not regress):
      - HTMX lifecycle classes (.htmx-indicator, .htmx-request, .htmx-swapping,
@@ -125,7 +123,6 @@
   --sp-10: 64px;
   --gutter-lg: 40px;
   --reader-max-width: 800px;
-  --sidebar-width: 280px;
 
   /* Radius. */
   --radius-sm: 4px;
@@ -310,7 +307,7 @@ mark {
 }
 .brand:hover { text-decoration: none; }
 
-.topnav { display: none; gap: var(--sp-1); }
+.topnav { display: flex; gap: var(--sp-1); }
 .topnav a {
   color: var(--muted);
   padding: var(--sp-2) var(--sp-4);
@@ -332,50 +329,6 @@ mark {
 }
 @media (min-width: 768px) {
   .topbar { padding: 0 var(--sp-6); }
-  .topnav { display: flex; }
-}
-
-/* ---------- chrome: sidebar (rail >=768px, drawer below) ---------- */
-.sidebar {
-  width: var(--sidebar-width);
-  background: var(--bg-void);
-  border: 1px solid var(--glass-border);
-  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  z-index: 60;
-  padding: var(--sp-6) var(--sp-6) var(--sp-6);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-}
-.sidebar .brand { padding: 0 var(--sp-3); font-size: 15px; }
-.sidebar li { list-style: none; }
-.sidebar ul { margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
-
-/* Profile header (sidebar top) — decorative local-mode identity. */
-.profile {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-1) var(--sp-3);
-}
-.profile-name {
-  font-weight: 700;
-  font-size: var(--type-body);
-  line-height: 1.3;
-  color: var(--text);
-}
-.profile-sub {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--outline);
-  margin-top: 2px;
 }
 
 /* Avatar — glossy node, Material person glyph (no user system yet). */
@@ -394,56 +347,6 @@ mark {
 }
 .avatar .mat-icon { font-size: 60%; font-variation-settings: "FILL" 1; }
 .avatar-sm { width: 32px; height: 32px; }
-.avatar-lg { width: 48px; height: 48px; }
-
-.sidebar-nav-item {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: var(--touch-target);
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-md);
-  color: var(--on-surface-variant);
-  font-family: var(--font-mono);
-  font-size: var(--type-label-caps);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color 0.15s var(--ease-house), color 0.15s var(--ease-house);
-}
-.sidebar-nav-item .mat-icon { font-size: 22px; }
-.sidebar-nav-item:hover { color: var(--text); text-decoration: none; background: var(--surface-container-high); }
-.sidebar-nav-item.active,
-.sidebar-nav-item[aria-current="page"] {
-  color: var(--on-primary-container);
-  background: var(--primary-container);
-  border-left: 4px solid var(--primary);
-  border-radius: var(--radius-md);
-  transform: translateX(4px);
-}
-.sidebar-signout { margin-top: auto; padding-top: var(--sp-4); border-top: 1px solid var(--glass-border); }
-
-/* Mobile: drawer hidden by default, slides in on body.sidebar-open. */
-@media (max-width: 767px) {
-  .sidebar {
-    transform: translateX(-105%);
-    transition: transform 0.3s var(--ease-house);
-  }
-  body.sidebar-open .sidebar { transform: translateX(0); }
-  body.sidebar-open::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    z-index: 55;
-  }
-  body.sidebar-open { overflow: hidden; }
-}
-@media (min-width: 768px) {
-  .main-content { margin-left: var(--sidebar-width); }
-  .sidebar { z-index: 20; }
-}
 
 /* ---------- chrome: bottom tab bar (<=560px and/or standalone) ---------- */
 .tabbar { display: none; }
@@ -1435,9 +1338,9 @@ input:focus {
 @media (prefers-reduced-motion: reduce) {
   .htmx-settling, .htmx-swapping, .htmx-request,
   .progress-fill, .ring-fill, .btn, .btn-icon, .topnav a, .tabbar a,
-  .sidebar-nav-item, .job-card, .play-btn, input[type="url"],
+  .job-card, .play-btn, input[type="url"],
   input[type="search"], input[type="text"], input[type="password"],
-  .hero-input, .hero-cta, .back, .sidebar, .step-dot::before,
+  .hero-input, .hero-cta, .back, .step-dot::before,
   .step.active:not(:last-child)::after {
     animation: none !important;
     transition: none !important;
